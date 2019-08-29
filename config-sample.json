@@ -1,0 +1,25 @@
+{
+    "Instances" : [
+        {
+            "Bind" : "127.0.0.1:8000",
+            "ExecPath": "C:\\PHP\\php-cgi.exe",
+            "Args" : [],
+            "Env": [
+                "PHP_FCGI_MAX_REQUESTS=5000" ,
+                "PHP_INI_SCAN_DIR=c:\\php\\conf.d"
+            ],
+            "MaxProcesses" : 8
+        } ,
+
+        {
+            "Bind" : "127.0.0.1:8001",
+            "ExecPath": "C:\\PHP\\php-cgi.exe",
+            "Args" : [],
+            "Env": [
+                "PHP_FCGI_MAX_REQUESTS=5000" ,
+                "PHP_INI_SCAN_DIR=c:\\php\\conf.d"
+            ],
+            "MaxProcesses" : 4
+        }
+    ]
+}
