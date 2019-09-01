@@ -5,11 +5,11 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"time"
+	"sync"
 	"wphpfpm/phpfpm"
+	"wphpfpm/server"
 
 	"github.com/chai2010/winsvc"
-	"github.com/tidwall/evio"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
@@ -24,18 +24,14 @@ var (
 	commandRun       *kingpin.CmdClause
 	flagConfigFile   *string
 
-	shutdownEvioServer = false
+	servers []*server.Server
 )
-
-type evioContext struct {
-	inStream *evio.InputStream
-	process  *phpfpm.Process
-}
 
 func main() {
 
 	if !winsvc.IsAnInteractiveSession() {
 		// run as service
+
 		flag := kingpin.Flag("conf", "Config file path , required by install or run.")
 		flagConfigFile = flag.Required().String()
 		kingpin.Parse()
@@ -124,10 +120,6 @@ func installService() {
 	log.Println("Install service : success.")
 }
 
-func startServe() {
-
-}
-
 // 啟動服務
 func startService() {
 
@@ -140,6 +132,53 @@ func startService() {
 
 	log.Println("PHP-CGI Manage started")
 
+	var events server.Event
+
+	events.OnConnect = func(c *server.Conn) (action server.Action) {
+		p := phpfpm.GetIdleProcess(c.Server().Tag.(int))
+		if p == nil {
+			log.Printf("Can not get php-cgi process\n")
+			action = server.Close
+			return
+		}
+		err := p.Proxy(c) // blocked
+		if err != nil {
+			log.Printf("proxy error : %s\n", err.Error())
+		}
+		phpfpm.PutIdleProcess(p)
+
+		return
+	}
+
+	events.OnDisconnect = func(c *server.Conn) (action server.Action) {
+		log.Println("On Disconnect")
+		return
+	}
+
+	conf := phpfpm.Conf()
+
+	var wg sync.WaitGroup
+
+	wg.Add(len(conf.Instances))
+
+	servers = make([]*server.Server, len(conf.Instances))
+
+	for i := 0; i < len(conf.Instances); i++ {
+		instance := conf.Instances[i]
+		servers[i] = &server.Server{MaxConnections: instance.MaxProcesses, BindAddress: instance.Bind, Tag: i}
+
+		log.Printf("Start server #%d on %s\n", i, servers[i].BindAddress)
+
+		go func(s *server.Server) {
+			err := s.Serve(events)
+			if err != nil {
+				log.Printf("Service serve error : %s\n", err.Error())
+			}
+			wg.Done()
+		}(servers[i])
+	}
+	log.Println("Service Startted")
+
 	// 這段處理 CTRL + C
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)
@@ -147,82 +186,20 @@ func startService() {
 		for sig := range c {
 			println(sig.String())
 			stopService()
+			return
 		}
 	}()
 
-	var events evio.Events
-
-	events.Opened = func(c evio.Conn) (out []byte, opts evio.Options, action evio.Action) {
-		// c.SetContext(&evio.InputStream{})
-		log.Printf("opened: laddr: %v , raddr: %v , addrIndex : %d", c.LocalAddr(), c.RemoteAddr(), c.AddrIndex())
-		var p *phpfpm.Process
-		for {
-			p = phpfpm.GetIdleProcess(c.AddrIndex())
-			if p != nil {
-				break
-			}
-			// no idle process , wait
-			time.Sleep(time.Duration(time.Millisecond * 100))
-		}
-
-		err = phpfpm.SetProcessActive(p, true)
-		if err != nil {
-			log.Println(err)
-			action = evio.Close
-			return
-		}
-		log.Println("Set idle process to active")
-
-		c.SetContext(p)
-		p.StartWaitResponse(c)
-		return
-	}
-
-	// f, err := os.OpenFile("d:\\test\\wphpfp.bin", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
-	// defer f.Close()
-
-	events.Data = func(c evio.Conn, in []byte) (out []byte, action evio.Action) {
-		log.Println("event data")
-		p := c.Context().(*phpfpm.Process)
-		if in != nil {
-			// f.WriteString("CADDY IN\n\n")
-			// f.Write(in)
-			p.Write(in)
-			log.Println("Write to php-cgi success")
-		} else {
-			out = p.Response()
-		}
-
-		return
-	}
-	events.Closed = func(c evio.Conn, err error) (action evio.Action) {
-		log.Println("event closed")
-		p := c.Context().(*phpfpm.Process)
-		// 設定 php-cgi process 可以不用了
-		phpfpm.SetProcessActive(p, false)
-		log.Printf("closed: laddr: %v: raddr: %v", c.LocalAddr(), c.RemoteAddr())
-		return
-	}
-
-	events.Tick = func() (delay time.Duration, action evio.Action) {
-		// 這段判斷是否要停止服務 , 每秒判斷一次
-		delay = time.Second
-		if shutdownEvioServer {
-			phpfpm.Stop()
-			action = evio.Shutdown
-			log.Println("Tick shutdown")
-		}
-		return
-	}
-	log.Println("Service started.")
-
-	if err := evio.Serve(events, "tcp://127.0.0.1:8000"); err != nil {
-		log.Fatalln(err)
-	}
+	wg.Wait()
+	phpfpm.Stop()
 	log.Println("Service Stopped")
 }
 
 // 停止服務
 func stopService() {
-	shutdownEvioServer = true
+
+	for i := 0; i < len(servers); i++ {
+		servers[i].Shutdown()
+	}
+
 }

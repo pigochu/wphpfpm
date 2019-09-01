@@ -2,24 +2,28 @@
     "Instances" : [
         {
             "Bind" : "127.0.0.1:8000",
-            "ExecPath": "C:\\PHP\\php-cgi.exe",
+            "ExecPath": "C:\\PHP7\\php-cgi.exe",
             "Args" : [],
             "Env": [
                 "PHP_FCGI_MAX_REQUESTS=5000" ,
-                "PHP_INI_SCAN_DIR=c:\\php\\conf.d"
+                "PHP_INI_SCAN_DIR=c:\\php7\\conf.d",
+                "PHPIniDir=c:\\php7"
             ],
-            "MaxProcesses" : 8
+            "MaxProcesses" : 8,
+            "Note" : "這是專門跑 PHP7 用的 , MaxProcesses 最大啟動 8 個 php-cgi"
         } ,
 
         {
             "Bind" : "127.0.0.1:8001",
-            "ExecPath": "C:\\PHP\\php-cgi.exe",
+            "ExecPath": "C:\\PHP5\\php-cgi.exe",
             "Args" : [],
             "Env": [
                 "PHP_FCGI_MAX_REQUESTS=5000" ,
-                "PHP_INI_SCAN_DIR=c:\\php\\conf.d"
+                "PHP_INI_SCAN_DIR=c:\\php5\\conf.d",
+                "PHPIniDir=c:\\php5"
             ],
-            "MaxProcesses" : 4
+            "MaxProcesses" : 4,
+            "Note" : "這是專門跑 PHP5 用的 , MaxProcesses 最大啟動 4 個 php-cgi"
         }
     ]
 }

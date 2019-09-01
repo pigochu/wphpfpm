@@ -2,15 +2,15 @@ package phpfpm
 
 import (
 	"container/list"
-	"io/ioutil"
+	"io"
 	"log"
+	"net"
 	"os"
 	"os/exec"
 	"strconv"
 	"sync"
 	"time"
 
-	"github.com/tidwall/evio"
 	"gopkg.in/natefinch/npipe.v2"
 )
 
@@ -24,18 +24,17 @@ type Instance struct {
 
 // Process : struct
 type Process struct {
-	execPath     string
-	args         []string
-	env          []string
-	cmd          *exec.Cmd
-	mapIndex     int // 這個是在 phpfpm.go 中的 idleprocess or activeprocess 連結用的
-	mapElement   *list.Element
-	pipe         *npipe.PipeConn
-	pippedName   string // php-cgi 執行時指定的 pipped name
-	responseData []byte // php-cgi 返回的資料
-	requestCount int    // 紀錄當前執行中的 php-cgi 已經接受幾次要求了
+	execPath   string
+	args       []string
+	env        []string
+	cmd        *exec.Cmd
+	mapIndex   int // 這個是在 phpfpm.go 中的 idleprocess or activeprocess 連結用的
+	mapElement *list.Element
+	pipe       *npipe.PipeConn
+	pippedName string // php-cgi 執行時指定的 pipped name
 
-	pipeMutex sync.Mutex
+	requestCount int // 紀錄當前執行中的 php-cgi 已經接受幾次要求了
+
 	// 這個是要標記是否 server 要關機了，當 kill process 才不會再啟動
 	serviceShutdown bool
 }
@@ -55,24 +54,26 @@ func newProcess(execPath string, args []string, env []string) *Process {
 }
 
 // TryStart : 會嘗試先啟動 php-cgi , 若啟動兩次失敗，會返回錯誤
-func (p *Process) TryStart() error {
-	var err error
+func (p *Process) TryStart() (err error) {
 	// pippedName 是啟動 php-cgi 時候指定 -b pipename 使用的
 	namedPipeNumber++
 	p.pippedName = `\\.\pipe\wphpfpm\wphpfpm.` + strconv.FormatInt(namedPipeNumber, 10)
 
 	for i := 0; i < 2; i++ {
-		p.args = append(p.args, "-b", p.pippedName)
-		p.cmd = exec.Command(p.execPath, p.args...)
+		args := append(p.args, "-b", p.pippedName)
+		p.cmd = nil
+		p.cmd = exec.Command(p.execPath, args...)
 		p.cmd.Env = os.Environ()
 		p.cmd.Env = append(p.cmd.Env, p.env...)
 		err = p.cmd.Start()
 		if err == nil {
-			p.requestCount = 0
-			return nil
+			i = 3
 		}
 	}
-	return err
+	if err != nil {
+		log.Printf("Start php-cgi error : %s\n", err.Error())
+	}
+	return
 }
 
 // connectPipe : 連接 pipe
@@ -93,38 +94,39 @@ func (p *Process) connectPipe() error {
 	return nil
 }
 
-// StartWaitResponse ..
-func (p *Process) StartWaitResponse(c evio.Conn) error {
+// Proxy 將 tcp 來源跟 windows named pipe 直接做讀寫 , 完成時返回 nil
+func (p *Process) Proxy(conn net.Conn) error {
+	var retErr error
 
-	errroot := p.connectPipe()
-	if errroot != nil {
-		return errroot
+	err := p.connectPipe()
+	if err != nil {
+		return err
 	}
 
-	// background read pipe
+	var wg sync.WaitGroup
+	wg.Add(2)
+
 	go func() {
-		var err error
-		p.responseData, err = ioutil.ReadAll(p.pipe)
-		if len(p.responseData) > 0 {
-			// notify evio onData
-			c.Wake()
-		}
+		_, err := io.Copy(conn, p.pipe)
 		if err != nil {
-			log.Println("background read pipe err " + err.Error())
+			p.pipe.Close()
 		}
+		retErr = err
+		wg.Done()
 	}()
 
-	return nil
-}
+	go func() {
+		_, err := io.Copy(p.pipe, conn)
+		if err != nil {
+			p.pipe.Close()
+		}
+		retErr = err
+		wg.Done()
+	}()
 
-// Write ...
-func (p *Process) Write(data []byte) (int, error) {
-	return p.pipe.Write(data)
-}
+	wg.Wait()
 
-// Response ...
-func (p *Process) Response() []byte {
-	return p.responseData
+	return retErr
 }
 
 // Kill : 停止 php-cgi

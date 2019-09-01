@@ -14,8 +14,6 @@ wphpfpm 是我初次練習 Go Lang 開發用來管理 Windows 下的 php-cgi
 4. 可以安裝於 Windows Service，也可以命令列模式下跑
 5. JSON 格式的設定檔
 
-> 請注意 ! 目前的版本尚有一些問題待克服，最大的問題是，如果超過最大 php-cgi 開啟數量會 block 住，目前僅供開發測試用，千萬不要用 apache ab 來測試
-
 請直接下載 GO SDK (version 1.12+)後，執行以下命令，就可以得到 wphpfpm.exe
 
 ~~~bash
@@ -34,27 +32,27 @@ go build
 {
     "Instances" : [
         {
-            "Bind" : "tcp://127.0.0.1:8000",
-            "ExecPath": "C:\\PHP\\php-cgi.exe",
+            "Bind" : "127.0.0.1:8000",
+            "ExecPath": "C:\\PHP7\\php-cgi.exe",
             "Args" : [],
             "Env": [
-                "INS=1",
                 "PHP_FCGI_MAX_REQUESTS=5000" ,
                 "PHP_INI_SCAN_DIR=c:\\php\\conf.d"
             ],
-            "MaxProcesses" : 8
+            "MaxProcesses" : 8,
+            "Note" : "這是專門跑 PHP7 用的 , MaxProcesses 最大啟動 8 個 php-cgi"
         } ,
 
         {
-            "Bind" : "tcp://127.0.0.1:8001",
-            "ExecPath": "C:\\PHP\\php-cgi.exe",
+            "Bind" : "127.0.0.1:8001",
+            "ExecPath": "C:\\PHP5\\php-cgi.exe",
             "Args" : [],
             "Env": [
-                "INS=2",
                 "PHP_FCGI_MAX_REQUESTS=5000" ,
                 "PHP_INI_SCAN_DIR=c:\\php\\conf.d"
             ],
-            "MaxProcesses" : 4
+            "MaxProcesses" : 4,
+            "Note" : "這是專門跑 PHP5 用的 , MaxProcesses 最大啟動 4 個 php-cgi"
         }
     ]
 }
@@ -66,6 +64,7 @@ go build
 - Args : 可以帶入 php-cgi 額外參數，**注意，不能使用 -b 的參數**
 - Env : 可以額外加上環境變數
 - MaxProcesses : 最大 php-cgi 執行數量
+- Note : 此欄位並無作用，只是用來註解的
 
 
 

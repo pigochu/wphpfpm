@@ -6,7 +6,6 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
-	"strconv"
 	"sync"
 )
 
@@ -17,12 +16,13 @@ type ConfRoot struct {
 
 // ConfInstance : JSON Instances
 type ConfInstance struct {
-	Bind         string   `json:"Bind"`
-	ExecPath     string   `json:"ExecPath"`
-	Args         []string `json:"Args"`
-	Env          []string `json:"Env"`
-	MaxRequest   int      `json:"MaxRequest"`
-	MaxProcesses int      `json:"MaxProcesses"`
+	Bind     string   `json:"Bind"`
+	ExecPath string   `json:"ExecPath"`
+	Args     []string `json:"Args"`
+	Env      []string `json:"Env"`
+	// MaxRequestsPerProcess 每個php-cgi行程最多能夠處理幾次要求
+	MaxRequestsPerProcess int `json:"MaxRequestsPerProcess"`
+	MaxProcesses          int `json:"MaxProcesses"`
 }
 
 var (
@@ -35,10 +35,9 @@ var (
 
 	// 使用中的 php-cgi process
 	// activeProcesses = make(map[string]*list.List)
-	activeProcesses []*list.List
+	// activeProcesses []*list.List
 
-	stop = false
-
+	stop  = false
 	mutex sync.Mutex
 )
 
@@ -51,14 +50,11 @@ func InitConfig(confpath string) error {
 	log.Printf("debug  instances len %d", len(conf.Instances))
 	if err == nil {
 		// init idle/active processes list
+		instanceLen := len(conf.Instances)
+		idleProcesses = make([]*list.List, instanceLen)
 
-		idleProcesses = make([]*list.List, 2)
-		activeProcesses = make([]*list.List, 2)
-		for i := 0; i < len(conf.Instances); i++ {
+		for i := 0; i < instanceLen; i++ {
 			idleProcesses[i] = new(list.List)
-			activeProcesses[i] = new(list.List)
-
-			log.Println("debug create list mapKey " + conf.Instances[i].Bind)
 		}
 	}
 
@@ -81,11 +77,13 @@ func Start() {
 			p.mapIndex = i
 			err := p.TryStart()
 			if err != nil {
-				log.Println("Can not start instance " + strconv.Itoa(i) + "php-cgi")
+				log.Printf("Can not start instance %d\n", i)
 			} else {
+				mutex.Lock()
+				p.mapElement = idleProcesses[i].PushBack(p)
+				mutex.Unlock()
 				go monProcess(p)
 			}
-			p.mapElement = idleProcesses[i].PushBack(p)
 		}
 	}
 }
@@ -93,33 +91,38 @@ func Start() {
 // monProcess 監控 php-cgi 狀態是否跳出
 func monProcess(p *Process) {
 	for {
+
+		log.Printf("Mon php-cgi %s\n", p.pippedName)
+
 		err := p.cmd.Wait()
+
 		mutex.Lock()
-		defer mutex.Unlock()
+
 		if stop {
 			// 執行 phpfpm.Stop() 代表不需要再監控了
+			mutex.Unlock()
 			return
 		}
 
 		if err != nil {
-			log.Printf("cmd exit , pipe : %s , err : %s\n", p.pippedName, err.Error())
+			log.Printf("php-cgi exit , pipe : %s , err : %s\n", p.pippedName, err.Error())
 		} else {
-			log.Printf("cmd exit , pipe : %s , no err\n", p.pippedName)
+			log.Printf("php-cgi exit , pipe : %s , no err\n", p.pippedName)
 		}
 
 		idleProcesses[p.mapIndex].Remove(p.mapElement)
-		activeProcesses[p.mapIndex].Remove(p.mapElement)
 		err = p.TryStart()
 
 		if err != nil {
-			// 啟動成功
-			idleProcesses[p.mapIndex].PushBack(p)
-			log.Printf("cmd restart , pipe : %s\n", p.pippedName)
-		} else {
 			// 退出監控
-
+			log.Printf("php-cgi restart error : %s , pipe : %s\n", err.Error(), p.pippedName)
+			mutex.Unlock()
 			return
 		}
+		// 啟動成功
+		p.mapElement = idleProcesses[p.mapIndex].PushBack(p)
+		log.Printf("php-cgi restart , pipe : %s\n", p.pippedName)
+		mutex.Unlock()
 	}
 }
 
@@ -142,48 +145,35 @@ func Stop() {
 
 	}
 
-	for _, v := range activeProcesses {
-		for e := v.Front(); e != nil; e = next {
-			next = e.Next()
-			p := e.Value.(*Process)
-			p.Kill()
-			v.Remove(e)
-		}
-	}
 	log.Println("phpfpm stopped")
 }
 
-// GetIdleProcess : 取得任何一個 Idle 的 Process
+// GetIdleProcess : 取得任何一個 Idle 的 Process , 並且 Active
 func GetIdleProcess(addrIndex int) *Process {
 	mutex.Lock()
 	defer mutex.Unlock()
 	e := idleProcesses[addrIndex].Front()
 	if e != nil {
 		p := e.Value.(*Process)
+		idleProcesses[p.mapIndex].Remove(p.mapElement)
 		return p
 	}
 	return nil
 }
 
-// SetProcessActive : 設定 Process active 或 idle
+// PutIdleProcess : 設定 Process 為 idle
 // active = true 代表啟用
 // active = false 代表 idle
-func SetProcessActive(p *Process, active bool) error {
+func PutIdleProcess(p *Process) (err error) {
 	mutex.Lock()
 	defer mutex.Unlock()
-
-	if active {
-		idleProcesses[p.mapIndex].Remove(p.mapElement)
-		p.mapElement = activeProcesses[p.mapIndex].PushBack(p)
-	} else {
-		if p.pipe != nil {
-			p.pipe.Close()
-			p.pipe = nil
-		}
-		activeProcesses[p.mapIndex].Remove(p.mapElement)
-		p.mapElement = idleProcesses[p.mapIndex].PushBack(p)
+	if p.pipe != nil {
+		err = p.pipe.Close()
+		p.pipe = nil
 	}
-	return nil
+	p.mapElement = idleProcesses[p.mapIndex].PushBack(p)
+
+	return
 }
 
 // loadJSONFile 讀取 JSON 設定檔，並返回 *Config
