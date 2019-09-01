@@ -37,9 +37,11 @@ go build
             "Args" : [],
             "Env": [
                 "PHP_FCGI_MAX_REQUESTS=5000" ,
-                "PHP_INI_SCAN_DIR=c:\\php\\conf.d"
+                "PHP_INI_SCAN_DIR=c:\\php7\\conf.d",
+                "PHPIniDir=c:\\php7"
             ],
             "MaxProcesses" : 8,
+            "MaxRequestsPerProcess": 5000,
             "Note" : "這是專門跑 PHP7 用的 , MaxProcesses 最大啟動 8 個 php-cgi"
         } ,
 
@@ -49,9 +51,11 @@ go build
             "Args" : [],
             "Env": [
                 "PHP_FCGI_MAX_REQUESTS=5000" ,
-                "PHP_INI_SCAN_DIR=c:\\php\\conf.d"
+                "PHP_INI_SCAN_DIR=c:\\php5\\conf.d",
+                "PHPIniDir=c:\\php5"
             ],
             "MaxProcesses" : 4,
+            "MaxRequestsPerProcess": 5000,
             "Note" : "這是專門跑 PHP5 用的 , MaxProcesses 最大啟動 4 個 php-cgi"
         }
     ]
@@ -64,6 +68,7 @@ go build
 - Args : 可以帶入 php-cgi 額外參數，**注意，不能使用 -b 的參數**
 - Env : 可以額外加上環境變數
 - MaxProcesses : 最大 php-cgi 執行數量
+- MaxRequestsPerProcess : 每隻 php-cgi 行程，最多能處理幾次請求 , 這個數值必須與 Env 的環境變數 PHP_FCGI_MAX_REQUESTS 一致才不會出問題
 - Note : 此欄位並無作用，只是用來註解的
 
 

@@ -46,8 +46,6 @@ var (
 func InitConfig(confpath string) error {
 	var err error
 	conf, err = loadJSONFile(confpath)
-	log.Println("debug init")
-	log.Printf("debug  instances len %d", len(conf.Instances))
 	if err == nil {
 		// init idle/active processes list
 		instanceLen := len(conf.Instances)
@@ -95,6 +93,16 @@ func monProcess(p *Process) {
 		log.Printf("Mon php-cgi %s\n", p.pippedName)
 
 		err := p.cmd.Wait()
+		if p.requestCount >= conf.Instances[p.mapIndex].MaxRequestsPerProcess {
+			err = p.TryStart()
+			if err != nil {
+				p.restartChan <- false
+			} else {
+				p.restartChan <- true
+			}
+
+			continue
+		}
 
 		mutex.Lock()
 
@@ -162,17 +170,22 @@ func GetIdleProcess(addrIndex int) *Process {
 }
 
 // PutIdleProcess : 設定 Process 為 idle
-// active = true 代表啟用
-// active = false 代表 idle
 func PutIdleProcess(p *Process) (err error) {
+
 	mutex.Lock()
 	defer mutex.Unlock()
 	if p.pipe != nil {
 		err = p.pipe.Close()
 		p.pipe = nil
 	}
-	p.mapElement = idleProcesses[p.mapIndex].PushBack(p)
 
+	if p.requestCount >= conf.Instances[p.mapIndex].MaxRequestsPerProcess {
+		if true == <-p.restartChan {
+			p.mapElement = idleProcesses[p.mapIndex].PushBack(p)
+		}
+	} else {
+		p.mapElement = idleProcesses[p.mapIndex].PushBack(p)
+	}
 	return
 }
 

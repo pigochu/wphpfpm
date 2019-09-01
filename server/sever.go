@@ -32,14 +32,11 @@ type Conn struct {
 
 // SetContext 設定任意型態的關聯資源 , 可藉由 Context() 取得
 func (c *Conn) SetContext(ctx interface{}) {
-	log.Printf("SetContext : %p\n", ctx)
 	c.ctx = ctx
-	log.Printf("Context() : %p\n", c.Context())
 }
 
 // Context 取得關聯資源 , 可藉由 SetContext() 設定
 func (c *Conn) Context() interface{} {
-	log.Printf("Get c.context : %p\n", c.ctx)
 	return c.ctx
 }
 
@@ -56,7 +53,6 @@ func (s *Server) Serve(event Event) error {
 		return err
 	}
 	s.listener = netutil.LimitListener(s.listener, s.MaxConnections)
-	log.Printf("Debug max accept : %d\n", s.MaxConnections)
 
 	var nextAction Action
 	nextAction = None
@@ -64,12 +60,10 @@ func (s *Server) Serve(event Event) error {
 	if event.OnStartup != nil {
 		// 如果有實作 Startup 事件，就呼叫
 		// TODO next action ? only allow Shutdown
-		log.Println("Call event OnStartup")
 		nextAction = event.OnStartup(s)
 	}
 
 	if &nextAction == nil || nextAction == None {
-		log.Println("call loopAccept")
 		return s.loopAccept(event)
 	}
 
@@ -79,7 +73,6 @@ func (s *Server) Serve(event Event) error {
 // loopAccept 開始接受外部連線
 func (s *Server) loopAccept(event Event) error {
 
-	log.Println("Accepting")
 	s.shutdownChan = make(chan bool, 1)
 
 	for {
@@ -125,6 +118,9 @@ func (s *Server) loopAccept(event Event) error {
 
 			}(conn)
 		} else {
+			if netconn != nil {
+				netconn.Close()
+			}
 			log.Printf("Accept error : %s\n", err.Error())
 			return err
 		}
@@ -136,8 +132,6 @@ func (s *Server) loopAccept(event Event) error {
 func (s *Server) triggerOnConnect(event Event, c *Conn) Action {
 	nextAction := Close
 	if event.OnConnect != nil {
-		log.Println("Call OnConnect")
-
 		nextAction := event.OnConnect(c)
 		if &nextAction == nil {
 			nextAction = Close
@@ -150,7 +144,6 @@ func (s *Server) triggerOnDisconnect(event Event, c *Conn) Action {
 	nextAction := None
 	c.Close() // 關閉連線
 	if event.OnDisconnect != nil {
-		log.Println("Call OnDisconnect")
 		nextAction = event.OnDisconnect(c)
 		if &nextAction == nil {
 			nextAction = None
@@ -161,14 +154,12 @@ func (s *Server) triggerOnDisconnect(event Event, c *Conn) Action {
 
 func (s *Server) triggerOnShutdown(event Event) {
 	if event.OnShutdown != nil {
-		log.Println("Call OnShutdown")
 		event.OnShutdown(s)
 	}
 }
 
 // Shutdown 停止服務
 func (s *Server) Shutdown() {
-	log.Println("Shutdown() be called")
 	close(s.shutdownChan)
 	s.listener.Close()
 }

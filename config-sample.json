@@ -10,6 +10,7 @@
                 "PHPIniDir=c:\\php7"
             ],
             "MaxProcesses" : 8,
+            "MaxRequestsPerProcess": 5000,
             "Note" : "這是專門跑 PHP7 用的 , MaxProcesses 最大啟動 8 個 php-cgi"
         } ,
 
@@ -23,6 +24,7 @@
                 "PHPIniDir=c:\\php5"
             ],
             "MaxProcesses" : 4,
+            "MaxRequestsPerProcess": 5000,
             "Note" : "這是專門跑 PHP5 用的 , MaxProcesses 最大啟動 4 個 php-cgi"
         }
     ]

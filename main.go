@@ -150,11 +150,6 @@ func startService() {
 		return
 	}
 
-	events.OnDisconnect = func(c *server.Conn) (action server.Action) {
-		log.Println("On Disconnect")
-		return
-	}
-
 	conf := phpfpm.Conf()
 
 	var wg sync.WaitGroup
@@ -177,7 +172,7 @@ func startService() {
 			wg.Done()
 		}(servers[i])
 	}
-	log.Println("Service Startted")
+	log.Println("Service Started")
 
 	// 這段處理 CTRL + C
 	c := make(chan os.Signal, 1)

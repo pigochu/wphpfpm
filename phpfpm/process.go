@@ -37,6 +37,8 @@ type Process struct {
 
 	// 這個是要標記是否 server 要關機了，當 kill process 才不會再啟動
 	serviceShutdown bool
+
+	restartChan chan bool
 }
 
 var (
@@ -50,6 +52,7 @@ func newProcess(execPath string, args []string, env []string) *Process {
 	p.execPath = execPath
 	p.args = args
 	p.env = env
+	p.restartChan = make(chan bool)
 	return p
 }
 
@@ -58,7 +61,7 @@ func (p *Process) TryStart() (err error) {
 	// pippedName 是啟動 php-cgi 時候指定 -b pipename 使用的
 	namedPipeNumber++
 	p.pippedName = `\\.\pipe\wphpfpm\wphpfpm.` + strconv.FormatInt(namedPipeNumber, 10)
-
+	p.requestCount = 0
 	for i := 0; i < 2; i++ {
 		args := append(p.args, "-b", p.pippedName)
 		p.cmd = nil
@@ -109,18 +112,18 @@ func (p *Process) Proxy(conn net.Conn) error {
 	go func() {
 		_, err := io.Copy(conn, p.pipe)
 		if err != nil {
-			p.pipe.Close()
+			retErr = err
 		}
-		retErr = err
+
 		wg.Done()
 	}()
 
 	go func() {
 		_, err := io.Copy(p.pipe, conn)
 		if err != nil {
-			p.pipe.Close()
+			retErr = err
 		}
-		retErr = err
+
 		wg.Done()
 	}()
 
