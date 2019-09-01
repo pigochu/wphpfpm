@@ -118,6 +118,6 @@ wphpfpm stop
 ## 資源清單 ##
 
 - Windows Service 處理 : https://github.com/chai2010/winsvc
-- "github.com/tidwall/evio"
 - 命令列處理 : https://gopkg.in/alecthomas/kingpin.v2
+- Windows Named Pipe : https://github.com/natefinch/npipe
 - 網路文章(https://blog.csdn.net/small_qch/article/details/19562661)
