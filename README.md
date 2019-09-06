@@ -1,24 +1,24 @@
-# wphpfpm (Windows PHP FPM) #
+# wphpfpm (PHP FastCGI Manager for windows) #
 
-wphpfpm 是我初次練習 Go Lang 開發用來管理 Windows 下的 php-cgi
+wphpfpm is my first go-lang project for manage php-cgi on Windows.
 
-由於 php-cgi 一次只能服務一個客戶端，除非使用 apache 的 mod_fcgid，不然還真難管理
+Since php-cgi can only serve one client at one time, unless you use apache's mod_fcgid, it's really hard to manage.
 
-所以我就自己寫來玩玩，主要是因為用 caddy 來測試 php 只能啟動一隻 php-cgi 實在太不人道了，而且當我修改 php 的設定值，想要重啟 php-cgi，必須要自己手動砍掉 php-cgi 行程
+So I wrote it for myself, mainly because using caddy to test php can only start one php-cgi process. It is too inhuman, and when I want to change the php settings and want to restart php-cgi, I have to manually kill php-cgi.
 
-有關於性能，可以參考 [BENCHMARK.md](./BENCHMARK.md)
+For performance, please refer to  [BENCHMARK.md](./BENCHMARK.md)
 
 
 
-目前有的功能如下
+## Features ##
 
-1. wphpfpm 是獨立的服務，類似 Linux 下的 php-fpm
-2. 可以建立不同版本的 php-cgi 來跑
-3. php-cgi 可以設定最大啟動的數量
-4. 可以安裝於 Windows Service，也可以命令列模式下跑
-5. JSON 格式的設定檔
+1. wphpfpm is a standalone service, similar to php-fpm under Linux
+2. You can create multiple instances for multiple version php-cgi
+3. php-cgi can set the maximum number of process
+4. wphpfpm can be a windows service or running on console mode.
+5. JSON format configuration file
 
-請直接下載 [GO SDK](https://golang.org/) (version 1.12+)後，執行以下命令，就可以得到 wphpfpm.exe
+Please download GO  [GO SDK](https://golang.org/)  (version 1.12+) and execute the following command to get wphpfpm.exe
 
 ~~~bash
 go build
@@ -26,11 +26,9 @@ go build
 
 
 
+## Configure file  ##
 
-
-## 設定檔說明 ##
-
-以下是 json 範例 , 原始碼中 [config-sample.json](./config-sample.json) 可以下載來修改使用
+The following is a json example. The source code [config-sample.json](./config-sample.json) can be download and modify it for your environment.
 
 ```json
 {
@@ -41,7 +39,7 @@ go build
         "MaxBackups": 4,
         "MaxAge":     7,
         "Compress":   true,
-        "Note": "如果不需要 Logger, 可以拿掉整個 Logger 區段 , MaxSize 是 MB 為單位 , MaxAge 是以天為單位，本例子為每一份log有7天的內容"
+        "Note": "If you don't need Logger, you can remove the entire Logger section, MaxSize is the unit of MB, MaxAge is the unit of days, this example has 7 days of content per log."
     },
     "Instances" : [
         {
@@ -73,7 +71,7 @@ go build
 }
 ```
 
-- LogLevel : 依照等級有以下，預設是 ERROR
+- LogLevel : According to the level, the default is ERROR
   * PANIC
   * FATAL
   * ERROR
@@ -81,27 +79,27 @@ go build
   * INFO
   * DEBUG
   * TRACE
-- Logger : 可以定義 Log 輸出至檔案，如果不需要，可以拿掉，輸出會是 Console
-- Instances : 定義有多少種 php-cgi 要啟動，這可做為多版本之用
-- Bind : 定義該 instance 要使用甚麼 IP 及 Port ，若針對多版本必須讓不同的 Instances 用不同的 Port 才有效
-- ExecPath : php-cgi 真實路徑
-- Args : 可以帶入 php-cgi 額外參數，**注意，不能使用 -b 的參數**
-- Env : 可以額外加上環境變數
-- MaxProcesses : 最大 php-cgi 執行數量
-- MaxRequestsPerProcess : 每隻 php-cgi 行程，最多能處理幾次請求 , 這個數值必須與 Env 的環境變數 PHP_FCGI_MAX_REQUESTS 一致或小於才不會出問題
-- Note : 此欄位並無作用，只是用來註解的
+- Logger : You can define the Log output to the file. If you don't need it, you can remove it. The output will be Console (stderr).
+- Instances : Define how many kinds of php-cgi to start, this can be used as multiple versions
+- Bind : Define what IP and Port to use for this instance. If multiple versions are required, different Instances must be used with different Ports.
+- ExecPath : php-cgi real  path.
+- Args : You can add parameters for execute php-cgi.exe, note that you can't use  -b  parameters
+- Env : Additional environmental variables
+- MaxProcesses : This directive sets the maximum number of php-cgi processes which can be active at one time.
+- MaxRequestsPerProcess : Each php-cgi  process trip can handle up to several requests. This value must be the same or less than Env's environment variable PHP_FCGI_MAX_REQUESTS.
+- Note : This field has no effect, just for comment
 
 
 
-## 使用方式 ##
+## Usage ##
 
-### 在命令列模式下執行 ###
+### Run in command line mode (console mode) ###
 
 ```
 wphpfpm run --conf=config.json
 ```
 
-### 安裝於 Windows Service ###
+### Install as Windows Service ###
 
 ```
 wphpfpm install --conf=c:\wphpfpm\config.json
@@ -109,7 +107,7 @@ wphpfpm install --conf=c:\wphpfpm\config.json
 
 注意，安裝為 Windows Service 模式運作時，必須使用管理者權限才能安裝
 
-### 移除 wphpfpm service ###
+### Remove wphpfpm service ###
 
 ```
 wphpfpm uninstall
@@ -117,22 +115,22 @@ wphpfpm uninstall
 
 
 
-### 啟動及停止 wphpfpm service ###
+### Start and stop wphpfpm service ###
 
 ```
 wphpfpm start
 wphpfpm stop
 ```
 
-或者，在 Windows 的 **控制台\所有控制台項目\系統管理工具** 下的 **服務** 也可以進行啟動或停止 PHP FastCGI Manager for windows
+Alternatively, the service under Windows Control Panel\All Control Panel Items\Administrative Tools\Services can also be started or stopped PHP FastCGI Manager for windows
 
 
 
-## 資源清單 ##
+## Resouces ##
 
-- Windows Service 處理 : https://github.com/chai2010/winsvc
-- 命令列處理 : https://gopkg.in/alecthomas/kingpin.v2
+- Windows Service Control : https://github.com/chai2010/winsvc
+- Command Line parser  : https://gopkg.in/alecthomas/kingpin.v2
 - Windows Named Pipe : https://github.com/natefinch/npipe
-- 網路文章(https://blog.csdn.net/small_qch/article/details/19562661)
-- 處理 Log/LogLevel : Logrus (https://github.com/sirupsen/logrus)
+- Article (https://blog.csdn.net/small_qch/article/details/19562661)
+- Log/LogLevel : Logrus (https://github.com/sirupsen/logrus)
 - Log Rotate : lumberjack (https://github.com/natefinch/lumberjack)
