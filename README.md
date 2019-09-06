@@ -18,7 +18,7 @@ wphpfpm 是我初次練習 Go Lang 開發用來管理 Windows 下的 php-cgi
 4. 可以安裝於 Windows Service，也可以命令列模式下跑
 5. JSON 格式的設定檔
 
-請直接下載 GO SDK (version 1.12+)後，執行以下命令，就可以得到 wphpfpm.exe
+請直接下載 [GO SDK](https://golang.org/) (version 1.12+)後，執行以下命令，就可以得到 wphpfpm.exe
 
 ~~~bash
 go build
