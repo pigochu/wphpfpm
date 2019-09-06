@@ -105,7 +105,7 @@ wphpfpm run --conf=config.json
 wphpfpm install --conf=c:\wphpfpm\config.json
 ```
 
-注意，安裝為 Windows Service 模式運作時，必須使用管理者權限才能安裝
+Note that when install as  a Windows Service, you must use administrator privileges to install.
 
 ### Remove wphpfpm service ###
 
