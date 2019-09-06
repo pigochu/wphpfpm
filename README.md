@@ -37,7 +37,7 @@ go build
         "MaxBackups": 4,
         "MaxAge":     7,
         "Compress":   true,
-        "Note": "如果不需要 Logger, 可以拿掉整個 Logger 區段 ,或 FileName 設為空字串 , MaxSize 是 MB 為單位 , MaxAge 是以天為單位，本例子為每一份log有7天的內容,並且保留 4 份"
+        "Note": "如果不需要 Logger, 可以拿掉整個 Logger 區段 , MaxSize 是 MB 為單位 , MaxAge 是以天為單位，本例子為每一份log有7天的內容"
     },
     "Instances" : [
         {
@@ -45,6 +45,7 @@ go build
             "ExecPath": "C:\\PHP7\\php-cgi.exe",
             "Args" : [],
             "Env": [
+                "PHPRC=C:\\PHP7",
                 "PHP_FCGI_MAX_REQUESTS=5000" ,
                 "PHP_INI_SCAN_DIR=c:\\php7\\conf.d"
             ],
@@ -57,6 +58,7 @@ go build
             "ExecPath": "C:\\PHP5\\php-cgi.exe",
             "Args" : [],
             "Env": [
+                "PHPRC=C:\\PHP5",
                 "PHP_FCGI_MAX_REQUESTS=5000" ,
                 "PHP_INI_SCAN_DIR=c:\\php5\\conf.d"
             ],

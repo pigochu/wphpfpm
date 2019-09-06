@@ -14,6 +14,7 @@
             "ExecPath": "C:\\PHP7\\php-cgi.exe",
             "Args" : [],
             "Env": [
+                "PHPRC=C:\\PHP7",
                 "PHP_FCGI_MAX_REQUESTS=5000" ,
                 "PHP_INI_SCAN_DIR=c:\\php7\\conf.d"
             ],
@@ -26,6 +27,7 @@
             "ExecPath": "C:\\PHP5\\php-cgi.exe",
             "Args" : [],
             "Env": [
+                "PHPRC=C:\\PHP5",
                 "PHP_FCGI_MAX_REQUESTS=5000" ,
                 "PHP_INI_SCAN_DIR=c:\\php5\\conf.d"
             ],
