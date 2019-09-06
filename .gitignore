@@ -1,3 +1,4 @@
 /config.json
 /*.exe
-/wphpfpm.exe~
+/*.exe~
+/*.log

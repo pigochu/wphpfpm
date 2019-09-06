@@ -1,15 +1,20 @@
 package main
 
 import (
-	"log"
+	"bytes"
+	"fmt"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"sync"
+	"wphpfpm/conf"
 	"wphpfpm/phpfpm"
 	"wphpfpm/server"
 
 	"github.com/chai2010/winsvc"
+	"github.com/natefinch/lumberjack"
+	log "github.com/sirupsen/logrus"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
@@ -25,19 +30,18 @@ var (
 	flagConfigFile   *string
 
 	servers []*server.Server
+	// config  *conf.Conf
 )
 
 func main() {
-
 	if !winsvc.IsAnInteractiveSession() {
 		// run as service
-
 		flag := kingpin.Flag("conf", "Config file path , required by install or run.")
 		flagConfigFile = flag.Required().String()
 		kingpin.Parse()
-		checkFlagConfigFile(flagConfigFile)
+		checkConfigFileExist(*flagConfigFile)
 
-		log.Println(serviceName, "Run service")
+		fmt.Println(serviceName, "Run service")
 		if err := winsvc.RunAsService(serviceName, startService, stopService, false); err != nil {
 			log.Fatalf(serviceName+" run: %v\n", err)
 		}
@@ -46,7 +50,7 @@ func main() {
 		initCommandFlag()
 		switch kingpin.Parse() {
 		case commandInstall.FullCommand():
-			checkFlagConfigFile(flagConfigFile)
+			checkConfigFileExist(*flagConfigFile)
 			installService()
 		case commandUninstall.FullCommand():
 			if err := winsvc.RemoveService(serviceName); err != nil {
@@ -54,8 +58,7 @@ func main() {
 			}
 			log.Println("Uninstall service: success")
 		case commandRun.FullCommand():
-			checkFlagConfigFile(flagConfigFile)
-			log.Println("Start in console mode , press CTRL+C to exited ...")
+			checkConfigFileExist(*flagConfigFile)
 			startService()
 		case commandStart.FullCommand():
 			if err := winsvc.StartService(serviceName); err != nil {
@@ -87,14 +90,6 @@ func initCommandFlag() {
 	}
 }
 
-func checkFlagConfigFile(configFile *string) {
-	if _, err := os.Stat(*configFile); err != nil {
-		if os.IsNotExist(err) {
-			log.Fatalf("Config file %s is not exist.", *configFile)
-		}
-	}
-}
-
 // 安裝服務
 func installService() {
 	var serviceExec string
@@ -122,28 +117,45 @@ func installService() {
 
 // 啟動服務
 func startService() {
+	config, err := conf.LoadFile(*flagConfigFile)
 
-	err := phpfpm.InitConfig(*flagConfigFile)
 	if err != nil {
-		log.Fatalln("startService:", err)
+		fmt.Printf("Config load error : %s\n", err.Error())
+		os.Exit(1)
 	}
 
-	phpfpm.Start()
-
-	log.Println("PHP-CGI Manage started")
+	fmt.Fprintf(os.Stdout, "Start in console mode , press CTRL+C to exited ...\r\n\r\n")
+	initLogger(config)
+	err = phpfpm.Start(config)
+	if err != nil {
+		log.Fatalf("Can not start service : %s\n", err.Error())
+	}
 
 	var events server.Event
 
 	events.OnConnect = func(c *server.Conn) (action server.Action) {
+
 		p := phpfpm.GetIdleProcess(c.Server().Tag.(int))
+		defer func() { // 必须要先声明defer，否则不能捕获到panic异常
+			if err := recover(); err != nil {
+				fmt.Printf("onConnect process %p", p)
+				fmt.Printf("onConnect err %p", err)
+				os.Exit(1)
+			}
+		}()
+
 		if p == nil {
-			log.Printf("Can not get php-cgi process\n")
+			if log.IsLevelEnabled(log.GetLevel()) {
+				log.Error("Can not get php-cgi process")
+			}
 			action = server.Close
 			return
 		}
 		err := p.Proxy(c) // blocked
 		if err != nil {
-			log.Printf("proxy error : %s\n", err.Error())
+			if log.IsLevelEnabled(log.GetLevel()) {
+				log.Debugf("php-cgi(%s) proxy error, because %s", p.ExecWithPippedName(), err.Error())
+			}
 		}
 		phpfpm.PutIdleProcess(p)
 
@@ -162,24 +174,24 @@ func startService() {
 		instance := conf.Instances[i]
 		servers[i] = &server.Server{MaxConnections: instance.MaxProcesses, BindAddress: instance.Bind, Tag: i}
 
-		log.Printf("Start server #%d on %s\n", i, servers[i].BindAddress)
+		log.Infof("Start server #%d on %s", i, servers[i].BindAddress)
 
 		go func(s *server.Server) {
 			err := s.Serve(events)
 			if err != nil {
-				log.Printf("Service serve error : %s\n", err.Error())
+				log.Errorf("Service serve error : %s", err.Error())
 			}
 			wg.Done()
 		}(servers[i])
 	}
-	log.Println("Service Started")
+	log.Info("Service running ...")
 
 	// 這段處理 CTRL + C
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)
 	go func() {
 		for sig := range c {
-			println(sig.String())
+			log.Debugf("Service got signal: %s", sig.String())
 			stopService()
 			return
 		}
@@ -187,7 +199,7 @@ func startService() {
 
 	wg.Wait()
 	phpfpm.Stop()
-	log.Println("Service Stopped")
+	log.Info("Service Stopped.")
 }
 
 // 停止服務
@@ -197,4 +209,81 @@ func stopService() {
 		servers[i].Shutdown()
 	}
 
+}
+
+func checkConfigFileExist(filepath string) {
+	exist := conf.FileExist(filepath)
+	if !exist {
+		fmt.Printf("Could not load config file : %s", filepath)
+		os.Exit(1)
+	}
+}
+
+func initLogger(config *conf.Conf) {
+
+	formatter := &MyTextFormatter{}
+	log.SetFormatter(formatter)
+
+	if config.LogLevel == "" {
+		config.LogLevel = "ERROR"
+	}
+
+	logLevel, err := log.ParseLevel(config.LogLevel)
+	if err != nil {
+		log.Fatalf("LogLevel %s can not parse.", config.LogLevel)
+	}
+	log.SetLevel(logLevel)
+	log.Infof("Set LogLevel to %s.", strings.ToUpper(logLevel.String()))
+
+	// Set logger
+	if len(config.Logger.Filename) > 0 {
+		logger := &lumberjack.Logger{
+			Filename:   config.Logger.Filename,
+			MaxSize:    config.Logger.MaxSize,
+			MaxBackups: config.Logger.MaxBackups,
+			MaxAge:     config.Logger.MaxAge,
+			Compress:   config.Logger.Compress,
+		}
+		log.SetOutput(logger)
+	}
+
+	log.Infof("Logger %s", config.Logger.Filename)
+
+	// Repair config
+	for i := 0; i < len(config.Instances); i++ {
+		if config.Instances[i].MaxRequestsPerProcess < 1 {
+			log.Warnf("Instance #%d MaxRequestsPerProcess is less 1 , set to 500", i)
+			config.Instances[i].MaxRequestsPerProcess = 500
+		}
+
+		if config.Instances[i].MaxProcesses < 1 {
+			log.Warnf("Instance #%d MaxProcesses is less 1 , set to 4", i)
+			config.Instances[i].MaxProcesses = 4
+		}
+	}
+
+}
+
+// MyTextFormatter ...
+type MyTextFormatter struct {
+}
+
+// Format ...
+func (f *MyTextFormatter) Format(entry *log.Entry) ([]byte, error) {
+	// Note this doesn't include Time, Level and Message which are available on
+	// the Entry. Consult `godoc` on information about those fields or read the
+	// source of the official loggers.
+	var b *bytes.Buffer
+	if entry.Buffer != nil {
+		b = entry.Buffer
+	} else {
+		b = &bytes.Buffer{}
+	}
+	b.WriteString(entry.Time.Format("2006-01-02 15:04:05 -0700"))
+	b.WriteString(" [")
+	b.WriteString(entry.Level.String())
+	b.WriteString("]: ")
+	b.WriteString(entry.Message)
+	b.WriteByte('\n')
+	return b.Bytes(), nil
 }

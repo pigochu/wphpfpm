@@ -3,7 +3,6 @@ package phpfpm
 import (
 	"container/list"
 	"io"
-	"log"
 	"net"
 	"os"
 	"os/exec"
@@ -11,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	log "github.com/sirupsen/logrus"
 	"gopkg.in/natefinch/npipe.v2"
 )
 
@@ -39,29 +39,38 @@ type Process struct {
 	serviceShutdown bool
 
 	restartChan chan bool
+
+	copyRbuf           []byte
+	copyWbuf           []byte
+	execWithPippedName string
 }
 
 var (
 	namedPipeNumber = time.Now().Unix()
 )
 
-// NewProcess : Create new PhpProcess
-// 建立一個新的 PhpProcess
+// newProcess : Create new Process
+// 建立一個新的 Process
 func newProcess(execPath string, args []string, env []string) *Process {
 	p := new(Process)
 	p.execPath = execPath
 	p.args = args
 	p.env = env
 	p.restartChan = make(chan bool)
+	p.copyRbuf = make([]byte, 8192)
+	p.copyWbuf = make([]byte, 8192)
 	return p
 }
 
-// TryStart : 會嘗試先啟動 php-cgi , 若啟動兩次失敗，會返回錯誤
+// TryStart will execute php-cgi twince
 func (p *Process) TryStart() (err error) {
 	// pippedName 是啟動 php-cgi 時候指定 -b pipename 使用的
 	namedPipeNumber++
 	p.pippedName = `\\.\pipe\wphpfpm\wphpfpm.` + strconv.FormatInt(namedPipeNumber, 10)
 	p.requestCount = 0
+	p.execWithPippedName = p.execPath + " -> " + p.pippedName
+
+	log.Debugf("Trying to start php-cgi(%s).", p.execWithPippedName)
 	for i := 0; i < 2; i++ {
 		args := append(p.args, "-b", p.pippedName)
 		p.cmd = nil
@@ -71,32 +80,37 @@ func (p *Process) TryStart() (err error) {
 		err = p.cmd.Start()
 		if err == nil {
 			i = 3
+			log.Debugf("php-cgi(%s) executing now.", p.execWithPippedName)
 		}
 	}
+
 	if err != nil {
-		log.Printf("Start php-cgi error : %s\n", err.Error())
+		log.Errorf("php-cgi(%s) can not start , because %s", p.execWithPippedName, err.Error())
 	}
 	return
 }
 
-// connectPipe : 連接 pipe
+// connectPipe will connect to php-cgi named pipe
 func (p *Process) connectPipe() error {
 	var err error
-	if p.pipe != nil {
-		p.pipe.Close()
-	}
+	//if p.pipe != nil {
+	//		p.pipe.Close()
+	//}
 
 	p.pipe, err = npipe.Dial(p.pippedName)
 	if err != nil {
-		log.Println("connectPipe() err " + err.Error())
+		log.Errorf("Connect to php-cgi(%s) error , because %s", p.execWithPippedName, err.Error())
 		return err
 	}
 	p.requestCount++
-	log.Printf("connectPipe() requestCount : %d ,  success %s", p.requestCount, p.pippedName)
+	if log.IsLevelEnabled(log.GetLevel()) {
+		log.Debugf("Connect to php-cgi(%s) successfully.", p.execWithPippedName)
+	}
 
 	return nil
 }
 
+// Proxy net.Conn <> Windows-named-pipe
 // Proxy 將 tcp 來源跟 windows named pipe 直接做讀寫 , 完成時返回 nil
 func (p *Process) Proxy(conn net.Conn) error {
 	var retErr error
@@ -110,7 +124,8 @@ func (p *Process) Proxy(conn net.Conn) error {
 	wg.Add(2)
 
 	go func() {
-		_, err := io.Copy(conn, p.pipe)
+		_, err := io.CopyBuffer(conn, p.pipe, p.copyRbuf)
+		/// 		_, err := io.Copy(conn, p.pipe)
 		if err != nil {
 			retErr = err
 		}
@@ -119,7 +134,8 @@ func (p *Process) Proxy(conn net.Conn) error {
 	}()
 
 	go func() {
-		_, err := io.Copy(p.pipe, conn)
+		_, err := io.CopyBuffer(p.pipe, conn, p.copyWbuf)
+		// _, err := io.Copy(p.pipe, conn)
 		if err != nil {
 			retErr = err
 		}
@@ -128,13 +144,25 @@ func (p *Process) Proxy(conn net.Conn) error {
 	}()
 
 	wg.Wait()
-
+	p.pipe.Close()
+	p.pipe = nil
 	return retErr
 }
 
-// Kill : 停止 php-cgi
-func (p *Process) Kill() error {
-	log.Printf("Process %p killing ...\n", p)
-	return p.cmd.Process.Kill()
-	// return p.cmd.Process.Signal(os.Interrupt)
+// Kill php-cgi process
+func (p *Process) Kill() (err error) {
+	err = p.cmd.Process.Kill()
+
+	if err != nil {
+		log.Errorf("Kill php-cgi(%s) error , because %s", p.execWithPippedName, err.Error())
+	} else {
+		log.Debugf("Kill php-cgi(%s) successfully.", p.execWithPippedName)
+	}
+
+	return
+}
+
+// ExecWithPippedName ...
+func (p *Process) ExecWithPippedName() string {
+	return p.execWithPippedName
 }

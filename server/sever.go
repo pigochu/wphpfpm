@@ -1,10 +1,9 @@
 package server
 
 import (
-	"log"
 	"net"
-	"sync"
 
+	log "github.com/sirupsen/logrus"
 	"golang.org/x/net/netutil"
 )
 
@@ -19,8 +18,7 @@ type Server struct {
 	listener    net.Listener
 
 	shutdownChan chan bool // 此值如果為 true , 代表 Server 必須停止，所有工作都需要關閉
-	runningCount int
-	runningMutex sync.Mutex
+	shutdown     bool
 }
 
 // Conn 是當 Accept 後產生的連線物件
@@ -46,20 +44,20 @@ func (c *Conn) Server() *Server { return c.server }
 // Serve ...
 func (s *Server) Serve(event Event) error {
 	var err error
-	s.runningCount = 0
+	s.shutdown = false
 	s.listener, err = net.Listen("tcp", s.BindAddress)
 
 	if err != nil {
 		return err
 	}
-	s.listener = netutil.LimitListener(s.listener, s.MaxConnections)
+	log.Debugf("Server %s starting listener", s.BindAddress)
 
+	s.listener = netutil.LimitListener(s.listener, s.MaxConnections)
 	var nextAction Action
 	nextAction = None
 
 	if event.OnStartup != nil {
 		// 如果有實作 Startup 事件，就呼叫
-		// TODO next action ? only allow Shutdown
 		nextAction = event.OnStartup(s)
 	}
 
@@ -73,6 +71,7 @@ func (s *Server) Serve(event Event) error {
 // loopAccept 開始接受外部連線
 func (s *Server) loopAccept(event Event) error {
 
+	log.Debugf("Server %s starting accept", s.BindAddress)
 	s.shutdownChan = make(chan bool, 1)
 
 	for {
@@ -85,14 +84,9 @@ func (s *Server) loopAccept(event Event) error {
 		}
 
 		netconn, err := s.listener.Accept()
-		if err == nil {
 
+		if err == nil {
 			conn := &Conn{netconn, nil, s}
-			s.runningMutex.Lock()
-			s.runningCount++
-			if s.runningCount < s.MaxConnections {
-				s.runningMutex.Unlock()
-			}
 
 			go func(c *Conn) {
 
@@ -105,23 +99,16 @@ func (s *Server) loopAccept(event Event) error {
 
 				}
 
-				if s.runningCount >= s.MaxConnections {
-					s.runningCount--
-					if s.runningCount < s.MaxConnections {
-						s.runningMutex.Unlock()
-					}
-				} else {
-					s.runningMutex.Lock()
-					s.runningCount--
-					s.runningMutex.Unlock()
-				}
-
 			}(conn)
 		} else {
 			if netconn != nil {
 				netconn.Close()
 			}
-			log.Printf("Accept error : %s\n", err.Error())
+
+			if s.shutdown == true {
+				err = nil
+			}
+
 			return err
 		}
 
@@ -130,6 +117,9 @@ func (s *Server) loopAccept(event Event) error {
 }
 
 func (s *Server) triggerOnConnect(event Event, c *Conn) Action {
+	if log.IsLevelEnabled(log.GetLevel()) {
+		log.Debugf("Client connect %s to %s", c.RemoteAddr().String(), c.LocalAddr().String())
+	}
 	nextAction := Close
 	if event.OnConnect != nil {
 		nextAction := event.OnConnect(c)
@@ -141,6 +131,9 @@ func (s *Server) triggerOnConnect(event Event, c *Conn) Action {
 }
 
 func (s *Server) triggerOnDisconnect(event Event, c *Conn) Action {
+	if log.IsLevelEnabled(log.GetLevel()) {
+		log.Debugf("Client disconnect %s to %s", c.RemoteAddr().String(), c.LocalAddr().String())
+	}
 	nextAction := None
 	c.Close() // 關閉連線
 	if event.OnDisconnect != nil {
@@ -160,8 +153,10 @@ func (s *Server) triggerOnShutdown(event Event) {
 
 // Shutdown 停止服務
 func (s *Server) Shutdown() {
+	s.shutdown = true
 	close(s.shutdownChan)
 	s.listener.Close()
+	log.Debugf("Server %s shutdown", s.BindAddress)
 }
 
 // Action 定義 Server 接下來的動作

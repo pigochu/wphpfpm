@@ -2,71 +2,33 @@ package phpfpm
 
 import (
 	"container/list"
-	"encoding/json"
-	"io/ioutil"
-	"log"
-	"os"
 	"sync"
+	"wphpfpm/conf"
+
+	log "github.com/sirupsen/logrus"
 )
-
-// ConfRoot : JSON root
-type ConfRoot struct {
-	Instances []ConfInstance
-}
-
-// ConfInstance : JSON Instances
-type ConfInstance struct {
-	Bind     string   `json:"Bind"`
-	ExecPath string   `json:"ExecPath"`
-	Args     []string `json:"Args"`
-	Env      []string `json:"Env"`
-	// MaxRequestsPerProcess 每個php-cgi行程最多能夠處理幾次要求
-	MaxRequestsPerProcess int `json:"MaxRequestsPerProcess"`
-	MaxProcesses          int `json:"MaxProcesses"`
-}
 
 var (
-	// 設定
-	conf *ConfRoot
-
-	// 尚未使用的 php-cgi process
-	// idleProcesses = make([map[string]*]list.List)
+	// conf 是 json 讀進來後產生的設定
+	phpfpmConf *conf.Conf
+	// idleProcesses php-cgi 如果沒有任何連線處理，都存在這
 	idleProcesses []*list.List
-
-	// 使用中的 php-cgi process
-	// activeProcesses = make(map[string]*list.List)
-	// activeProcesses []*list.List
-
-	stop  = false
-	mutex sync.Mutex
+	stopManage    = false // 如果調用 Stop() , 這個會是 true , 同時 mon() 也不會繼續監控
+	mutex         sync.Mutex
 )
 
-// InitConfig 初始化 php-cgi manager
-// confpath 為 --conf 帶入的設定檔完整路徑及名稱
-func InitConfig(confpath string) error {
-	var err error
-	conf, err = loadJSONFile(confpath)
-	if err == nil {
-		// init idle/active processes list
-		instanceLen := len(conf.Instances)
-		idleProcesses = make([]*list.List, instanceLen)
-
-		for i := 0; i < instanceLen; i++ {
-			idleProcesses[i] = new(list.List)
-		}
-	}
-
-	return err
-}
-
 // Conf : get Json config
-func Conf() *ConfRoot {
-	return conf
+func Conf() *conf.Conf {
+	return phpfpmConf
 }
 
 // Start php-cgi manager
-func Start() {
-	for i := 0; i < len(conf.Instances); i++ {
+func Start(conf *conf.Conf) (err error) {
+	log.Info("phpfpm starting.")
+	phpfpmConf = conf
+	instanceLen := len(conf.Instances)
+	idleProcesses = make([]*list.List, instanceLen)
+	for i := 0; i < instanceLen; i++ {
 		idleProcesses[i] = list.New()
 
 		for j := 0; j < conf.Instances[i].MaxProcesses; j++ {
@@ -74,26 +36,28 @@ func Start() {
 			p := newProcess(instance.ExecPath, instance.Args, instance.Env)
 			p.mapIndex = i
 			err := p.TryStart()
-			if err != nil {
-				log.Printf("Can not start instance %d\n", i)
-			} else {
+			if err == nil {
 				mutex.Lock()
 				p.mapElement = idleProcesses[i].PushBack(p)
 				mutex.Unlock()
 				go monProcess(p)
+			} else {
+				Stop()
+				return err
 			}
 		}
 	}
+	log.Info("phpfpm is in loop.")
+	return
 }
 
 // monProcess 監控 php-cgi 狀態是否跳出
 func monProcess(p *Process) {
+	log.Infof("Starting monitor php-cgi(%s)", p.ExecWithPippedName())
+	defer log.Infof("Stopped monitor php-cgi(%s)", p.ExecWithPippedName())
 	for {
-
-		log.Printf("Mon php-cgi %s\n", p.pippedName)
-
 		err := p.cmd.Wait()
-		if p.requestCount >= conf.Instances[p.mapIndex].MaxRequestsPerProcess {
+		if p.requestCount >= phpfpmConf.Instances[p.mapIndex].MaxRequestsPerProcess {
 			err = p.TryStart()
 			if err != nil {
 				p.restartChan <- false
@@ -106,16 +70,10 @@ func monProcess(p *Process) {
 
 		mutex.Lock()
 
-		if stop {
+		if stopManage {
 			// 執行 phpfpm.Stop() 代表不需要再監控了
 			mutex.Unlock()
 			return
-		}
-
-		if err != nil {
-			log.Printf("php-cgi exit , pipe : %s , err : %s\n", p.pippedName, err.Error())
-		} else {
-			log.Printf("php-cgi exit , pipe : %s , no err\n", p.pippedName)
 		}
 
 		idleProcesses[p.mapIndex].Remove(p.mapElement)
@@ -123,21 +81,21 @@ func monProcess(p *Process) {
 
 		if err != nil {
 			// 退出監控
-			log.Printf("php-cgi restart error : %s , pipe : %s\n", err.Error(), p.pippedName)
+			log.Errorf("php-cgi(%s) restart error, because %s", p.ExecWithPippedName(), err.Error())
 			mutex.Unlock()
 			return
 		}
 		// 啟動成功
 		p.mapElement = idleProcesses[p.mapIndex].PushBack(p)
-		log.Printf("php-cgi restart , pipe : %s\n", p.pippedName)
+		log.Infof("php-cgi(%s) restart successfully.", p.ExecWithPippedName())
 		mutex.Unlock()
 	}
 }
 
 // Stop php-cgi manager , 所有的 process kill
 func Stop() {
-	log.Println("phpfpm stoping")
-	stop = true
+	log.Info("phpfpm stoping.")
+	stopManage = true
 	mutex.Lock()
 	defer mutex.Unlock()
 
@@ -152,8 +110,7 @@ func Stop() {
 		}
 
 	}
-
-	log.Println("phpfpm stopped")
+	log.Info("phpfpm stopped.")
 }
 
 // GetIdleProcess : 取得任何一個 Idle 的 Process , 並且 Active
@@ -163,7 +120,8 @@ func GetIdleProcess(addrIndex int) *Process {
 	e := idleProcesses[addrIndex].Front()
 	if e != nil {
 		p := e.Value.(*Process)
-		idleProcesses[p.mapIndex].Remove(p.mapElement)
+		idleProcesses[p.mapIndex].Remove(e)
+		p.mapElement = nil
 		return p
 	}
 	return nil
@@ -179,26 +137,17 @@ func PutIdleProcess(p *Process) (err error) {
 		p.pipe = nil
 	}
 
-	if p.requestCount >= conf.Instances[p.mapIndex].MaxRequestsPerProcess {
+	if p.requestCount >= phpfpmConf.Instances[p.mapIndex].MaxRequestsPerProcess {
+		log.Warnf("php-cgi(%s) handled %d requests , need restart.", p.execWithPippedName, p.requestCount)
+		p.Kill()
 		if true == <-p.restartChan {
 			p.mapElement = idleProcesses[p.mapIndex].PushBack(p)
+		} else {
+			log.Warnf("php-cgi(%s) restart faild.", p.execWithPippedName)
 		}
 	} else {
 		p.mapElement = idleProcesses[p.mapIndex].PushBack(p)
+		log.Debugf("php-cgi(%s) is idle , requests count : %d", p.execWithPippedName, p.requestCount)
 	}
 	return
-}
-
-// loadJSONFile 讀取 JSON 設定檔，並返回 *Config
-func loadJSONFile(filePath string) (*ConfRoot, error) {
-	jsonFile, err := os.Open(filePath)
-	if err != nil {
-		return nil, err
-	}
-	defer jsonFile.Close()
-
-	conf := new(ConfRoot)
-	byteValue, _ := ioutil.ReadAll(jsonFile)
-	json.Unmarshal(byteValue, &conf)
-	return conf, nil
 }

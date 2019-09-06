@@ -9,7 +9,7 @@ wphpfpm 是我初次練習 Go Lang 開發用來管理 Windows 下的 php-cgi
 目前有的功能如下
 
 1. wphpfpm 是獨立的服務，類似 Linux 下的 php-fpm
-2. 可以建立不同辦本的 php-cgi 來跑
+2. 可以建立不同版本的 php-cgi 來跑
 3. php-cgi 可以設定最大啟動的數量
 4. 可以安裝於 Windows Service，也可以命令列模式下跑
 5. JSON 格式的設定檔
@@ -26,10 +26,19 @@ go build
 
 ## 設定檔說明 ##
 
-以下是 json 範例
+以下是 json 範例 , 原始碼中 [config-sample.json](./config-sample.json) 可以下載來修改使用
 
 ```json
 {
+    "LogLevel" : "ERROR",
+    "Logger": {
+        "FileName": "",
+        "MaxSize":    10,
+        "MaxBackups": 3,
+        "MaxAge":     7,
+        "Compress":   true,
+        "Note": "如果不需要 Logger, 可以拿掉整個 Logger 區段 , MaxSize 是 MB 為單位 , MaxAge 是以天為單位，本例子為每一份log有7天的內容"
+    },
     "Instances" : [
         {
             "Bind" : "127.0.0.1:8000",
@@ -37,12 +46,10 @@ go build
             "Args" : [],
             "Env": [
                 "PHP_FCGI_MAX_REQUESTS=5000" ,
-                "PHP_INI_SCAN_DIR=c:\\php7\\conf.d",
-                "PHPIniDir=c:\\php7"
+                "PHP_INI_SCAN_DIR=c:\\php\\conf.d"
             ],
-            "MaxProcesses" : 8,
-            "MaxRequestsPerProcess": 5000,
-            "Note" : "這是專門跑 PHP7 用的 , MaxProcesses 最大啟動 8 個 php-cgi"
+            "MaxProcesses" : 4,
+            "MaxRequestsPerProcess": 500
         } ,
 
         {
@@ -51,17 +58,24 @@ go build
             "Args" : [],
             "Env": [
                 "PHP_FCGI_MAX_REQUESTS=5000" ,
-                "PHP_INI_SCAN_DIR=c:\\php5\\conf.d",
-                "PHPIniDir=c:\\php5"
+                "PHP_INI_SCAN_DIR=c:\\php\\conf.d"
             ],
-            "MaxProcesses" : 4,
-            "MaxRequestsPerProcess": 5000,
-            "Note" : "這是專門跑 PHP5 用的 , MaxProcesses 最大啟動 4 個 php-cgi"
+            "MaxProcesses" : 2,
+            "MaxRequestsPerProcess": 500
         }
     ]
 }
 ```
 
+- LogLevel : 依照等級有以下，預設是 ERROR
+  * PANIC
+  * FATAL
+  * ERROR
+  * WARN
+  * INFO
+  * DEBUG
+  * TRACE
+- Logger : 可以定義 Log 輸出至檔案，如果不需要，可以拿掉，輸出會是 Console
 - Instances : 定義有多少種 php-cgi 要啟動，這可做為多版本之用
 - Bind : 定義該 instance 要使用甚麼 IP 及 Port ，若針對多版本必須讓不同的 Instances 用不同的 Port 才有效
 - ExecPath : php-cgi 真實路徑
@@ -108,16 +122,11 @@ wphpfpm stop
 
 
 
-## 尚未完成的功能 ##
-
-- 更好的 Logger，目前都先隨便印訊息，能運作為先
-- Log File
-- Log Level
-- backlog
-
 ## 資源清單 ##
 
 - Windows Service 處理 : https://github.com/chai2010/winsvc
 - 命令列處理 : https://gopkg.in/alecthomas/kingpin.v2
 - Windows Named Pipe : https://github.com/natefinch/npipe
 - 網路文章(https://blog.csdn.net/small_qch/article/details/19562661)
+- 處理 Log/LogLevel : Logrus (https://github.com/sirupsen/logrus)
+- Log Rotate : lumberjack (https://github.com/natefinch/lumberjack)
