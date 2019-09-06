@@ -15,7 +15,7 @@
             "Args" : [],
             "Env": [
                 "PHP_FCGI_MAX_REQUESTS=5000" ,
-                "PHP_INI_SCAN_DIR=c:\\php\\conf.d"
+                "PHP_INI_SCAN_DIR=c:\\php7\\conf.d"
             ],
             "MaxProcesses" : 4,
             "MaxRequestsPerProcess": 500
@@ -27,7 +27,7 @@
             "Args" : [],
             "Env": [
                 "PHP_FCGI_MAX_REQUESTS=5000" ,
-                "PHP_INI_SCAN_DIR=c:\\php\\conf.d"
+                "PHP_INI_SCAN_DIR=c:\\php5\\conf.d"
             ],
             "MaxProcesses" : 2,
             "MaxRequestsPerProcess": 500

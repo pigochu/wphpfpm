@@ -82,7 +82,7 @@ go build
 - Args : 可以帶入 php-cgi 額外參數，**注意，不能使用 -b 的參數**
 - Env : 可以額外加上環境變數
 - MaxProcesses : 最大 php-cgi 執行數量
-- MaxRequestsPerProcess : 每隻 php-cgi 行程，最多能處理幾次請求 , 這個數值必須與 Env 的環境變數 PHP_FCGI_MAX_REQUESTS 一致才不會出問題
+- MaxRequestsPerProcess : 每隻 php-cgi 行程，最多能處理幾次請求 , 這個數值必須與 Env 的環境變數 PHP_FCGI_MAX_REQUESTS 一致或小於才不會出問題
 - Note : 此欄位並無作用，只是用來註解的
 
 
