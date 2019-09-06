@@ -6,6 +6,10 @@ wphpfpm 是我初次練習 Go Lang 開發用來管理 Windows 下的 php-cgi
 
 所以我就自己寫來玩玩，主要是因為用 caddy 來測試 php 只能啟動一隻 php-cgi 實在太不人道了，而且當我修改 php 的設定值，想要重啟 php-cgi，必須要自己手動砍掉 php-cgi 行程
 
+有關於性能，可以參考 [BENCHMARK.md](./BENCHMARK.md)
+
+
+
 目前有的功能如下
 
 1. wphpfpm 是獨立的服務，類似 Linux 下的 php-fpm
