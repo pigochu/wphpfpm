@@ -32,12 +32,12 @@ go build
 {
     "LogLevel" : "ERROR",
     "Logger": {
-        "FileName": "",
+        "FileName": "C:\\wphpfpm\\wphpfpm.log",
         "MaxSize":    10,
-        "MaxBackups": 3,
+        "MaxBackups": 4,
         "MaxAge":     7,
         "Compress":   true,
-        "Note": "如果不需要 Logger, 可以拿掉整個 Logger 區段 , MaxSize 是 MB 為單位 , MaxAge 是以天為單位，本例子為每一份log有7天的內容"
+        "Note": "如果不需要 Logger, 可以拿掉整個 Logger 區段 ,或 FileName 設為空字串 , MaxSize 是 MB 為單位 , MaxAge 是以天為單位，本例子為每一份log有7天的內容,並且保留 4 份"
     },
     "Instances" : [
         {
@@ -46,7 +46,7 @@ go build
             "Args" : [],
             "Env": [
                 "PHP_FCGI_MAX_REQUESTS=5000" ,
-                "PHP_INI_SCAN_DIR=c:\\php\\conf.d"
+                "PHP_INI_SCAN_DIR=c:\\php7\\conf.d"
             ],
             "MaxProcesses" : 4,
             "MaxRequestsPerProcess": 500
@@ -58,7 +58,7 @@ go build
             "Args" : [],
             "Env": [
                 "PHP_FCGI_MAX_REQUESTS=5000" ,
-                "PHP_INI_SCAN_DIR=c:\\php\\conf.d"
+                "PHP_INI_SCAN_DIR=c:\\php5\\conf.d"
             ],
             "MaxProcesses" : 2,
             "MaxRequestsPerProcess": 500

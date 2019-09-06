@@ -1,7 +1,7 @@
 {
     "LogLevel" : "ERROR",
     "Logger": {
-        "FileName": "",
+        "FileName": "C:\\wphpfpm\\wphpfpm.log",
         "MaxSize":    10,
         "MaxBackups": 4,
         "MaxAge":     7,
