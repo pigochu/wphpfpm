@@ -3,9 +3,13 @@
 - Hardware : Intel E3-1230v2
 - RAM : 16GB DDR3
 - OS : Windows 10
+- Benchmark tool : apache ab
 
 ## Caddy with one php-cgi ##
 
+See https://github.com/caddyserver/examples/tree/master/winphp
+
+~~~
 Server Software:        Caddy
 Server Hostname:        localhost
 Server Port:            2015
@@ -25,11 +29,12 @@ Requests per second:    78.92 [#/sec] (mean)
 Time per request:       126.707 [ms] (mean)
 Time per request:       12.671 [ms] (mean, across all concurrent requests)
 Transfer rate:          6614.41 [Kbytes/sec] received
-
+~~~
 
 
 ## Caddy with wphpfpm MaxProcess = 4 and LogLevel = DEBUG ##
 
+~~~
 Server Software:        Caddy
 Server Hostname:        localhost
 Server Port:            2015
@@ -48,3 +53,4 @@ Requests per second:    990.80 [#/sec] (mean)
 Time per request:       10.093 [ms] (mean)
 Time per request:       1.009 [ms] (mean, across all concurrent requests)
 Transfer rate:          87992.26 [Kbytes/sec] received
+~~~
