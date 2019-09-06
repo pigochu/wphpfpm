@@ -103,7 +103,7 @@ func (p *Process) connectPipe() error {
 		return err
 	}
 	p.requestCount++
-	if log.IsLevelEnabled(log.GetLevel()) {
+	if log.IsLevelEnabled(log.DebugLevel) {
 		log.Debugf("Connect to php-cgi(%s) successfully.", p.execWithPippedName)
 	}
 

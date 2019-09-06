@@ -136,16 +136,9 @@ func startService() {
 	events.OnConnect = func(c *server.Conn) (action server.Action) {
 
 		p := phpfpm.GetIdleProcess(c.Server().Tag.(int))
-		defer func() { // 必须要先声明defer，否则不能捕获到panic异常
-			if err := recover(); err != nil {
-				fmt.Printf("onConnect process %p", p)
-				fmt.Printf("onConnect err %p", err)
-				os.Exit(1)
-			}
-		}()
 
 		if p == nil {
-			if log.IsLevelEnabled(log.GetLevel()) {
+			if log.IsLevelEnabled(log.ErrorLevel) {
 				log.Error("Can not get php-cgi process")
 			}
 			action = server.Close
@@ -153,7 +146,7 @@ func startService() {
 		}
 		err := p.Proxy(c) // blocked
 		if err != nil {
-			if log.IsLevelEnabled(log.GetLevel()) {
+			if log.IsLevelEnabled(log.DebugLevel) {
 				log.Debugf("php-cgi(%s) proxy error, because %s", p.ExecWithPippedName(), err.Error())
 			}
 		}
@@ -221,7 +214,7 @@ func checkConfigFileExist(filepath string) {
 
 func initLogger(config *conf.Conf) {
 
-	formatter := &MyTextFormatter{}
+	formatter := &MyTextFormatter{timeFormat: "2006-01-02 15:04:05 -0700"}
 	log.SetFormatter(formatter)
 
 	if config.LogLevel == "" {
@@ -266,6 +259,7 @@ func initLogger(config *conf.Conf) {
 
 // MyTextFormatter ...
 type MyTextFormatter struct {
+	timeFormat string
 }
 
 // Format ...
@@ -279,7 +273,7 @@ func (f *MyTextFormatter) Format(entry *log.Entry) ([]byte, error) {
 	} else {
 		b = &bytes.Buffer{}
 	}
-	b.WriteString(entry.Time.Format("2006-01-02 15:04:05 -0700"))
+	b.WriteString(entry.Time.Format(f.timeFormat))
 	b.WriteString(" [")
 	b.WriteString(entry.Level.String())
 	b.WriteString("]: ")

@@ -71,7 +71,7 @@ func (s *Server) Serve(event Event) error {
 // loopAccept 開始接受外部連線
 func (s *Server) loopAccept(event Event) error {
 
-	log.Debugf("Server %s starting accept", s.BindAddress)
+	log.Infof("Server %s starting accept", s.BindAddress)
 	s.shutdownChan = make(chan bool, 1)
 
 	for {
@@ -117,7 +117,7 @@ func (s *Server) loopAccept(event Event) error {
 }
 
 func (s *Server) triggerOnConnect(event Event, c *Conn) Action {
-	if log.IsLevelEnabled(log.GetLevel()) {
+	if log.IsLevelEnabled(log.DebugLevel) {
 		log.Debugf("Client connect %s to %s", c.RemoteAddr().String(), c.LocalAddr().String())
 	}
 	nextAction := Close
@@ -131,7 +131,7 @@ func (s *Server) triggerOnConnect(event Event, c *Conn) Action {
 }
 
 func (s *Server) triggerOnDisconnect(event Event, c *Conn) Action {
-	if log.IsLevelEnabled(log.GetLevel()) {
+	if log.IsLevelEnabled(log.DebugLevel) {
 		log.Debugf("Client disconnect %s to %s", c.RemoteAddr().String(), c.LocalAddr().String())
 	}
 	nextAction := None
