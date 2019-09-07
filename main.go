@@ -258,7 +258,7 @@ func initLogger(config *conf.Conf) {
 			Compress:   config.Logger.Compress,
 		}
 		log.SetOutput(logger)
-		log.Info("Logger ouput set to %s.", config.Logger.Filename)
+		log.Infof("Logger ouput set to %s.", config.Logger.Filename)
 	} else {
 		log.Info("Logger ouput set to console.")
 	}
