@@ -124,6 +124,10 @@ wphpfpm stop
 
 Alternatively, the service under Windows Control Panel\All Control Panel Items\Administrative Tools\Services can also be started or stopped PHP FastCGI Manager for windows
 
+## Author
+
+Pigo Chu <pigochu@gmail.com>
+
 
 
 ## Resouces ##
