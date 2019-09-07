@@ -87,7 +87,9 @@ func (s *Server) loopAccept(event Event) error {
 
 		if err == nil {
 			conn := &Conn{netconn, nil, s}
-
+			if log.IsLevelEnabled(log.DebugLevel) {
+				log.Debugf("Accept %s to %s", conn.RemoteAddr().String(), conn.LocalAddr().String())
+			}
 			go func(c *Conn) {
 
 				nextAction := s.triggerOnConnect(event, c)
@@ -100,6 +102,7 @@ func (s *Server) loopAccept(event Event) error {
 				}
 
 			}(conn)
+
 		} else {
 			if netconn != nil {
 				netconn.Close()

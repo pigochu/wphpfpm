@@ -80,7 +80,9 @@ func (p *Process) TryStart() (err error) {
 		err = p.cmd.Start()
 		if err == nil {
 			i = 3
-			log.Debugf("php-cgi(%s) executing now.", p.execWithPippedName)
+			if log.IsLevelEnabled(log.DebugLevel) {
+				log.Debugf("php-cgi(%s) executing now.", p.execWithPippedName)
+			}
 		}
 	}
 
@@ -125,7 +127,6 @@ func (p *Process) Proxy(conn net.Conn) error {
 
 	go func() {
 		_, err := io.CopyBuffer(conn, p.pipe, p.copyRbuf)
-		/// 		_, err := io.Copy(conn, p.pipe)
 		if err != nil {
 			retErr = err
 		}
@@ -135,7 +136,6 @@ func (p *Process) Proxy(conn net.Conn) error {
 
 	go func() {
 		_, err := io.CopyBuffer(p.pipe, conn, p.copyWbuf)
-		// _, err := io.Copy(p.pipe, conn)
 		if err != nil {
 			retErr = err
 		}
@@ -154,9 +154,13 @@ func (p *Process) Kill() (err error) {
 	err = p.cmd.Process.Kill()
 
 	if err != nil {
-		log.Errorf("Kill php-cgi(%s) error , because %s", p.execWithPippedName, err.Error())
+		if log.IsLevelEnabled(log.ErrorLevel) {
+			log.Errorf("Kill php-cgi(%s) error , because %s", p.execWithPippedName, err.Error())
+		}
 	} else {
-		log.Debugf("Kill php-cgi(%s) successfully.", p.execWithPippedName)
+		if log.IsLevelEnabled(log.DebugLevel) {
+			log.Debugf("Kill php-cgi(%s) successfully.", p.execWithPippedName)
+		}
 	}
 
 	return

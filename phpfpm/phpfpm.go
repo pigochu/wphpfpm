@@ -87,8 +87,10 @@ func monProcess(p *Process) {
 		}
 		// 啟動成功
 		p.mapElement = idleProcesses[p.mapIndex].PushBack(p)
-		log.Infof("php-cgi(%s) restart successfully.", p.ExecWithPippedName())
 		mutex.Unlock()
+		if log.IsLevelEnabled(log.InfoLevel) {
+			log.Infof("php-cgi(%s) restart successfully.", p.ExecWithPippedName())
+		}
 	}
 }
 
@@ -143,11 +145,13 @@ func PutIdleProcess(p *Process) (err error) {
 		if true == <-p.restartChan {
 			p.mapElement = idleProcesses[p.mapIndex].PushBack(p)
 		} else {
-			log.Warnf("php-cgi(%s) restart faild.", p.execWithPippedName)
+			log.Errorf("php-cgi(%s) restart faild.", p.execWithPippedName)
 		}
 	} else {
 		p.mapElement = idleProcesses[p.mapIndex].PushBack(p)
-		log.Debugf("php-cgi(%s) is idle , requests count : %d", p.execWithPippedName, p.requestCount)
+		if log.IsLevelEnabled(log.DebugLevel) {
+			log.Debugf("php-cgi(%s) is idle , requests count : %d", p.execWithPippedName, p.requestCount)
+		}
 	}
 	return
 }
