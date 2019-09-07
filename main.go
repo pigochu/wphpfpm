@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -54,7 +55,8 @@ func main() {
 			installService()
 		case commandUninstall.FullCommand():
 			if err := winsvc.RemoveService(serviceName); err != nil {
-				log.Fatalln("Uninstall service: ", err)
+				fmt.Println("Uninstall service: ", err)
+				os.Exit(1)
 			}
 			log.Println("Uninstall service: success")
 		case commandRun.FullCommand():
@@ -62,14 +64,16 @@ func main() {
 			startService()
 		case commandStart.FullCommand():
 			if err := winsvc.StartService(serviceName); err != nil {
-				log.Fatalln("startService:", err)
+				fmt.Println("Start service:", err)
+				os.Exit(1)
 			}
-			log.Println("Start service: success")
+			fmt.Println("Start service: success")
 		case commandStop.FullCommand():
 			if err := winsvc.StopService(serviceName); err != nil {
-				log.Fatalln("Stop service: ", err)
+				fmt.Println("Stop service:", err)
+				os.Exit(1)
 			}
-			log.Println("Stop service: success")
+			fmt.Println("Stop service: success")
 			return
 		}
 	}
@@ -96,10 +100,12 @@ func installService() {
 	var err error
 
 	if serviceExec, err = winsvc.GetAppPath(); err != nil {
-		log.Fatal(err)
+		fmt.Println(err)
+		os.Exit(1)
 	}
 	if err := os.Chdir(filepath.Dir(serviceExec)); err != nil {
-		log.Fatal(err)
+		fmt.Println(err)
+		os.Exit(1)
 	}
 
 	abs, err := filepath.Abs(*flagConfigFile)
@@ -108,11 +114,12 @@ func installService() {
 	args := []string{"--conf", abs}
 	log.Printf("Service install name : %s , binpath : %s\n", serviceName, serviceExecFull)
 	if err := winsvc.InstallService(serviceExec, serviceName, serviceDesc, args...); err != nil {
-		log.Fatalf("Install service : (%s, %s): %v\n", serviceName, serviceDesc, err)
-		log.Fatalf("Install service : error.\n")
+		fmt.Printf("Install service : (%s, %s): %v\n", serviceName, serviceDesc, err)
+		fmt.Printf("Install service : error.\n")
+		os.Exit(1)
 	}
 
-	log.Println("Install service : success.")
+	fmt.Println("Install service : success.")
 }
 
 // 啟動服務
@@ -145,10 +152,8 @@ func startService() {
 			return
 		}
 		err := p.Proxy(c) // blocked
-		if err != nil {
-			if log.IsLevelEnabled(log.DebugLevel) {
-				log.Debugf("php-cgi(%s) proxy error, because %s", p.ExecWithPippedName(), err.Error())
-			}
+		if err != nil && log.IsLevelEnabled(log.DebugLevel) {
+			log.Debugf("php-cgi(%s) proxy error, because %s", p.ExecWithPippedName(), err.Error())
 		}
 		phpfpm.PutIdleProcess(p)
 
@@ -184,7 +189,7 @@ func startService() {
 	signal.Notify(c, os.Interrupt)
 	go func() {
 		for sig := range c {
-			log.Debugf("Service got signal: %s", sig.String())
+			log.Infof("Service got signal: %s", sig.String())
 			stopService()
 			return
 		}
@@ -230,6 +235,21 @@ func initLogger(config *conf.Conf) {
 
 	// Set logger
 	if len(config.Logger.Filename) > 0 {
+
+		logDir := path.Dir(config.Logger.Filename)
+		if err != nil {
+			log.Fatal(err)
+		}
+		exeDir, err := filepath.Abs(filepath.Dir(os.Args[0])) // 執行檔的路徑
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		if logDir == "." || logDir == "" {
+			// 如果 Filename 沒指定路徑，修正為 exe 的路徑
+			config.Logger.Filename = exeDir + "\\" + config.Logger.Filename
+		}
+
 		logger := &lumberjack.Logger{
 			Filename:   config.Logger.Filename,
 			MaxSize:    config.Logger.MaxSize,
@@ -238,18 +258,21 @@ func initLogger(config *conf.Conf) {
 			Compress:   config.Logger.Compress,
 		}
 		log.SetOutput(logger)
+		log.Info("Logger ouput set to %s.", config.Logger.Filename)
+	} else {
+		log.Info("Logger ouput set to console.")
 	}
-
-	log.Infof("Logger %s", config.Logger.Filename)
 
 	// Repair config
 	for i := 0; i < len(config.Instances); i++ {
 		if config.Instances[i].MaxRequestsPerProcess < 1 {
+			// Repair MaxRequestsPerProcess
 			log.Warnf("Instance #%d MaxRequestsPerProcess is less 1 , set to 500", i)
 			config.Instances[i].MaxRequestsPerProcess = 500
 		}
 
 		if config.Instances[i].MaxProcesses < 1 {
+			//Repair MaxProcesses
 			log.Warnf("Instance #%d MaxProcesses is less 1 , set to 4", i)
 			config.Instances[i].MaxProcesses = 4
 		}
@@ -257,16 +280,13 @@ func initLogger(config *conf.Conf) {
 
 }
 
-// MyTextFormatter ...
+// MyTextFormatter logrus custom formatter
 type MyTextFormatter struct {
 	timeFormat string
 }
 
-// Format ...
+// Format logrus custom format
 func (f *MyTextFormatter) Format(entry *log.Entry) ([]byte, error) {
-	// Note this doesn't include Time, Level and Message which are available on
-	// the Entry. Consult `godoc` on information about those fields or read the
-	// source of the official loggers.
 	var b *bytes.Buffer
 	if entry.Buffer != nil {
 		b = entry.Buffer
