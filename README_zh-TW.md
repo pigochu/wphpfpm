@@ -39,7 +39,7 @@ go build
         "MaxBackups": 4,
         "MaxAge":     7,
         "Compress":   true,
-        "Note": "如果不需要 Logger, 可以拿掉整個 Logger 區段 , MaxSize 是 MB 為單位 , MaxAge 是以天為單位，本例子為每一份log有7天的內容"
+        "Note": "如果不需要 Log File, 可以將 FileName 設為空字串，則所有 Log 將輸出至 Console , MaxSize 是 MB 為單位 , MaxAge 是以天為單位，本例子為每一份log有7天的內容"
     },
     "Instances" : [
         {
@@ -79,14 +79,29 @@ go build
   * INFO
   * DEBUG
   * TRACE
-- Logger : 可以定義 Log 輸出至檔案，如果不需要，可以拿掉，輸出會是 Console
+  
+- Logger : 可以定義 Logger 運作行為
+
+  - FileName : 可以定義 Log 輸出至檔案，如果不需要，可以設定為空字串，輸出會是 Console(stderr)
+  - MaxSize : 每一份 Log 檔案最大的 Size , 單位是 MB , 當 Log 檔案已經到達設定值時，會進行 Rotate 的動作。
+  - MaxBackups : 最大保留幾份 Log 檔案
+  - MaxAge : 每一份檔案保留幾天的內容，單位是天
+  - Compress : 是否在 Rotate 之後的檔案要進行壓縮，格式是 gz
+
 - Instances : 定義有多少種 php-cgi 要啟動，這可做為多版本之用
-- Bind : 定義該 instance 要使用甚麼 IP 及 Port ，若針對多版本必須讓不同的 Instances 用不同的 Port 才有效
-- ExecPath : php-cgi 真實路徑
-- Args : 可以帶入 php-cgi 額外參數，**注意，不能使用 -b 的參數**
-- Env : 可以額外加上環境變數
-- MaxProcesses : 最大 php-cgi 執行數量
-- MaxRequestsPerProcess : 每隻 php-cgi 行程，最多能處理幾次請求 , 這個數值必須與 Env 的環境變數 PHP_FCGI_MAX_REQUESTS 一致或小於才不會出問題
+
+  - Bind : 定義該 instance 要使用甚麼 IP 及 Port ，若針對多版本必須讓不同的 Instances 用不同的 Port 才有效
+
+  - ExecPath : php-cgi 真實路徑
+
+  - Args : 可以帶入 php-cgi 額外參數，**注意，不能使用 -b 的參數**
+
+  - Env : 可以額外加上環境變數
+
+  - MaxProcesses : 最大 php-cgi 執行數量
+
+  - MaxRequestsPerProcess : 每隻 php-cgi 行程，最多能處理幾次請求 , 這個數值必須與 Env 的環境變數 PHP_FCGI_MAX_REQUESTS 一致或小於才不會出問題
+
 - Note : 此欄位並無作用，只是用來註解的
 
 
@@ -126,9 +141,18 @@ wphpfpm stop
 
 
 
+## wphpfpm 運作的方式
+
+1. wphpfpm 是採用 TCP port 方式對外服務，例如 caddy 當作 Http Server，使用 caddy fastcgi 來連接 wphpfpm 設定值 Instances>Bind 所開啟的 Port
+2. wphpfpm 跟 php-cgi 之間的溝通則是採用 windows named pipe 方式溝通，我目前功力仍不夠，不知道如何讓 golang 直接對 php-cgi stdin 溝通，因為看 [xxfpm](https://github.com/78/xxfpm) 的源碼，理論上會更有效率。
+
+
+
 ## 作者 ##
 
-Pigo Chu <pigochu@gmail.com>
+- Pigo Chu <pigochu@gmail.com>
+
+- Web Site https://www.pigo.idv.tw
 
 
 

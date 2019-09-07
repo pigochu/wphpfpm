@@ -81,12 +81,15 @@ The following is a json example. The source code [config-sample.json](./config-s
   * TRACE
 - Logger : You can define the Log output to the file. If you don't need it, you can remove it. The output will be Console (stderr).
 - Instances : Define how many kinds of php-cgi to start, this can be used as multiple versions
-- Bind : Define what IP and Port to use for this instance. If multiple versions are required, different Instances must be used with different Ports.
-- ExecPath : php-cgi real  path.
-- Args : You can add parameters for execute php-cgi.exe, note that you can't use  -b  parameters
-- Env : Additional environmental variables
-- MaxProcesses : This directive sets the maximum number of php-cgi processes which can be active at one time.
-- MaxRequestsPerProcess : Each php-cgi  process trip can handle up to several requests. This value must be the same or less than Env's environment variable PHP_FCGI_MAX_REQUESTS.
+
+  - Bind : Define what IP and Port to use for this instance. If multiple versions are required, different Instances must be used with different Ports.
+
+  - ExecPath : php-cgi real  path.
+
+  - Args : You can add parameters for execute php-cgi.exe, note that you can't use  -b  parameters
+  - Env : Additional environmental variables
+  - MaxProcesses : This directive sets the maximum number of php-cgi processes which can be active at one time.
+  - MaxRequestsPerProcess : Each php-cgi  process trip can handle up to several requests. This value must be the same or less than Env's environment variable PHP_FCGI_MAX_REQUESTS.
 - Note : This field has no effect, just for comment
 
 
@@ -126,9 +129,9 @@ Alternatively, the service under Windows Control Panel\All Control Panel Items\A
 
 ## Author
 
-Pigo Chu <pigochu@gmail.com>
+- Pigo Chu <pigochu@gmail.com>
 
-
+- Web Site https://www.pigo.idv.tw
 
 ## Resouces ##
 
