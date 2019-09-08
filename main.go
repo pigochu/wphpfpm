@@ -31,7 +31,6 @@ var (
 	flagConfigFile   *string
 
 	servers []*server.Server
-	// config  *conf.Conf
 )
 
 func main() {
@@ -112,14 +111,13 @@ func installService() {
 
 	serviceExecFull := "\"" + serviceExec + "\"" + " --conf=" + abs
 	args := []string{"--conf", abs}
-	log.Printf("Service install name : %s , binpath : %s\n", serviceName, serviceExecFull)
+	fmt.Printf("Service install name : %s , binpath : %s\n", serviceName, serviceExecFull)
 	if err := winsvc.InstallService(serviceExec, serviceName, serviceDesc, args...); err != nil {
-		fmt.Printf("Install service : (%s, %s): %v\n", serviceName, serviceDesc, err)
-		fmt.Printf("Install service : error.\n")
+		fmt.Printf("Install service error : %s\n", err.Error())
 		os.Exit(1)
 	}
 
-	fmt.Println("Install service : success.")
+	fmt.Println("Install service successfully.")
 }
 
 // 啟動服務
@@ -151,9 +149,9 @@ func startService() {
 			action = server.Close
 			return
 		}
-		err := p.Proxy(c) // blocked
-		if err != nil && log.IsLevelEnabled(log.DebugLevel) {
-			log.Debugf("php-cgi(%s) proxy error, because %s", p.ExecWithPippedName(), err.Error())
+		serr, terr := p.Proxy(c) // blocked
+		if log.IsLevelEnabled(log.DebugLevel) && (serr != nil || terr != nil) {
+			log.Debugf("php-cgi(%s) proxy error , serr : %s , terr: %s", p.ExecWithPippedName(), serr, terr)
 		}
 		phpfpm.PutIdleProcess(p)
 

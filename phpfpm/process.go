@@ -24,14 +24,14 @@ type Instance struct {
 
 // Process : struct
 type Process struct {
-	execPath   string
-	args       []string
-	env        []string
-	cmd        *exec.Cmd
-	mapIndex   int // 這個是在 phpfpm.go 中的 idleprocess or activeprocess 連結用的
-	mapElement *list.Element
-	pipe       *npipe.PipeConn
-	pippedName string // php-cgi 執行時指定的 pipped name
+	execPath      string
+	args          []string
+	env           []string
+	cmd           *exec.Cmd
+	instanceIndex int // 這個是在 phpfpm.go 中的 idleprocess  連結用的 , 代表這個 Process 是屬於那個 Instance
+	mapElement    *list.Element
+	pipe          *npipe.PipeConn
+	pippedName    string // php-cgi 執行時指定的 pipped name
 
 	requestCount int // 紀錄當前執行中的 php-cgi 已經接受幾次要求了
 
@@ -43,6 +43,8 @@ type Process struct {
 	copyRbuf           []byte
 	copyWbuf           []byte
 	execWithPippedName string
+
+	wg sync.WaitGroup
 }
 
 var (
@@ -57,8 +59,8 @@ func newProcess(execPath string, args []string, env []string) *Process {
 	p.args = args
 	p.env = env
 	p.restartChan = make(chan bool)
-	p.copyRbuf = make([]byte, 8192)
-	p.copyWbuf = make([]byte, 8192)
+	p.copyRbuf = make([]byte, 4096)
+	p.copyWbuf = make([]byte, 16384)
 	return p
 }
 
@@ -113,40 +115,32 @@ func (p *Process) connectPipe() error {
 }
 
 // Proxy net.Conn <> Windows-named-pipe
-// Proxy 將 tcp 來源跟 windows named pipe 直接做讀寫 , 完成時返回 nil
-func (p *Process) Proxy(conn net.Conn) error {
-	var retErr error
+// Proxy 將 tcp 來源跟 windows named pipe 直接做讀寫
+// 返回值 serr 代表由 http server 讀取資料寫至 php-cgi 的錯誤
+// 返回值 terr 代表由 php-cgi 讀取資料寫至 http server 的錯誤
+func (p *Process) Proxy(conn net.Conn) (serr error, terr error) {
 
-	err := p.connectPipe()
-	if err != nil {
-		return err
+	terr = p.connectPipe()
+	if terr != nil {
+		return
 	}
 
-	var wg sync.WaitGroup
-	wg.Add(2)
-
+	p.wg.Add(2)
 	go func() {
-		_, err := io.CopyBuffer(conn, p.pipe, p.copyRbuf)
-		if err != nil {
-			retErr = err
-		}
-
-		wg.Done()
+		// read from web server , write to php-cgi
+		_, serr = io.CopyBuffer(p.pipe, conn, p.copyRbuf)
+		p.wg.Done()
+	}()
+	go func() {
+		// read from php-cgi , write to web server
+		_, terr = io.CopyBuffer(conn, p.pipe, p.copyWbuf)
+		p.wg.Done()
 	}()
 
-	go func() {
-		_, err := io.CopyBuffer(p.pipe, conn, p.copyWbuf)
-		if err != nil {
-			retErr = err
-		}
-
-		wg.Done()
-	}()
-
-	wg.Wait()
+	p.wg.Wait()
 	p.pipe.Close()
 	p.pipe = nil
-	return retErr
+	return
 }
 
 // Kill php-cgi process

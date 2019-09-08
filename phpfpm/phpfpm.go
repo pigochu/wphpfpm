@@ -34,7 +34,7 @@ func Start(conf *conf.Conf) (err error) {
 		for j := 0; j < conf.Instances[i].MaxProcesses; j++ {
 			instance := conf.Instances[i]
 			p := newProcess(instance.ExecPath, instance.Args, instance.Env)
-			p.mapIndex = i
+			p.instanceIndex = i
 			err := p.TryStart()
 			if err == nil {
 				mutex.Lock()
@@ -57,7 +57,7 @@ func monProcess(p *Process) {
 	defer log.Infof("Stopped monitor php-cgi(%s)", p.ExecWithPippedName())
 	for {
 		err := p.cmd.Wait()
-		if p.requestCount >= phpfpmConf.Instances[p.mapIndex].MaxRequestsPerProcess {
+		if p.requestCount >= phpfpmConf.Instances[p.instanceIndex].MaxRequestsPerProcess {
 			err = p.TryStart()
 			if err != nil {
 				p.restartChan <- false
@@ -76,7 +76,7 @@ func monProcess(p *Process) {
 			return
 		}
 
-		idleProcesses[p.mapIndex].Remove(p.mapElement)
+		idleProcesses[p.instanceIndex].Remove(p.mapElement)
 		err = p.TryStart()
 
 		if err != nil {
@@ -86,7 +86,7 @@ func monProcess(p *Process) {
 			return
 		}
 		// 啟動成功
-		p.mapElement = idleProcesses[p.mapIndex].PushBack(p)
+		p.mapElement = idleProcesses[p.instanceIndex].PushBack(p)
 		mutex.Unlock()
 		if log.IsLevelEnabled(log.InfoLevel) {
 			log.Infof("php-cgi(%s) restart successfully.", p.ExecWithPippedName())
@@ -115,18 +115,16 @@ func Stop() {
 	log.Info("phpfpm stopped.")
 }
 
-// GetIdleProcess : 取得任何一個 Idle 的 Process , 並且 Active
-func GetIdleProcess(addrIndex int) *Process {
+// GetIdleProcess : 取得任何一個 Idle 的 Process , 並且移除 Idle 列表
+func GetIdleProcess(instanceIndex int) (p *Process) {
 	mutex.Lock()
 	defer mutex.Unlock()
-	e := idleProcesses[addrIndex].Front()
+	e := idleProcesses[instanceIndex].Front()
 	if e != nil {
-		p := e.Value.(*Process)
-		idleProcesses[p.mapIndex].Remove(e)
+		p = idleProcesses[instanceIndex].Remove(e).(*Process)
 		p.mapElement = nil
-		return p
 	}
-	return nil
+	return
 }
 
 // PutIdleProcess : 設定 Process 為 idle
@@ -139,16 +137,16 @@ func PutIdleProcess(p *Process) (err error) {
 		p.pipe = nil
 	}
 
-	if p.requestCount >= phpfpmConf.Instances[p.mapIndex].MaxRequestsPerProcess {
+	if p.requestCount >= phpfpmConf.Instances[p.instanceIndex].MaxRequestsPerProcess {
 		log.Warnf("php-cgi(%s) handled %d requests , need restart.", p.execWithPippedName, p.requestCount)
 		p.Kill()
 		if true == <-p.restartChan {
-			p.mapElement = idleProcesses[p.mapIndex].PushBack(p)
+			p.mapElement = idleProcesses[p.instanceIndex].PushBack(p)
 		} else {
 			log.Errorf("php-cgi(%s) restart faild.", p.execWithPippedName)
 		}
 	} else {
-		p.mapElement = idleProcesses[p.mapIndex].PushBack(p)
+		p.mapElement = idleProcesses[p.instanceIndex].PushBack(p)
 		if log.IsLevelEnabled(log.DebugLevel) {
 			log.Debugf("php-cgi(%s) is idle , requests count : %d", p.execWithPippedName, p.requestCount)
 		}
