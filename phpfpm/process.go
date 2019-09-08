@@ -35,9 +35,6 @@ type Process struct {
 
 	requestCount int // 紀錄當前執行中的 php-cgi 已經接受幾次要求了
 
-	// 這個是要標記是否 server 要關機了，當 kill process 才不會再啟動
-	serviceShutdown bool
-
 	restartChan chan bool
 
 	copyRbuf           []byte
