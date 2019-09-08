@@ -129,7 +129,7 @@ func startService() {
 		os.Exit(1)
 	}
 
-	fmt.Fprintf(os.Stdout, "Start in console mode , press CTRL+C to exited ...\r\n\r\n")
+	fmt.Fprintf(os.Stdout, "Start in console mode , press CTRL+C to exit ...\r\n\r\n")
 	initLogger(config)
 	err = phpfpm.Start(config)
 	if err != nil {
