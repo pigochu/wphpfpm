@@ -24,7 +24,7 @@ wphpfpm 是我初次練習 Go Lang 開發用來管理 Windows 下的 php-cgi
 go build
 ~~~
 
-
+或者參考 [caddy-wphpfpm-example.md](./caddy-wphpfpm-example.md) 有說明 caddy + wphpfpm 的簡單設定。
 
 ## 設定檔說明 ##
 

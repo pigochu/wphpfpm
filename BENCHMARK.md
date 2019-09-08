@@ -31,8 +31,9 @@ Time per request:       12.671 [ms] (mean, across all concurrent requests)
 Transfer rate:          6614.41 [Kbytes/sec] received
 ~~~
 
-
 ## Caddy with wphpfpm MaxProcess = 4 and LogLevel = DEBUG ##
+
+see [caddy-wphpfpm-example.md](./caddy-wphpfpm-example.md)
 
 ~~~
 Server Software:        Caddy

@@ -24,7 +24,7 @@ Please download GO  [GO SDK](https://golang.org/)  (version 1.12+) and execute t
 go build
 ~~~
 
-
+Or refer to [caddy-wphpfpm-example.md](./caddy-wphpfpm-example.md) for a simple setup of caddy + wphpfpm.
 
 ## Configure file  ##
 
