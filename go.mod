@@ -8,6 +8,7 @@ require (
 	github.com/chai2010/winsvc v0.0.0-20161110002403-fe57a9a621ec
 	github.com/sirupsen/logrus v1.4.2
 	golang.org/x/net v0.0.0-20190827160401-ba9fcec4b297
+	golang.org/x/sys v0.0.0-20190907184412-d223b2b6db03
 	gopkg.in/alecthomas/kingpin.v2 v2.2.6
 	gopkg.in/natefinch/lumberjack.v2 v2.0.0
 	gopkg.in/natefinch/npipe.v2 v2.0.0-20160621034901-c1b8fa8bdcce

@@ -67,6 +67,9 @@ func monProcess(p *Process) {
 
 			continue
 		}
+		if err != nil {
+			log.Errorf("php-cgi(%s) exit error, because %s", p.ExecWithPippedName(), err.Error())
+		}
 
 		mutex.Lock()
 

@@ -56,7 +56,7 @@ func main() {
 				fmt.Println("Uninstall service: ", err)
 				os.Exit(1)
 			}
-			log.Println("Uninstall service: success")
+			fmt.Println("Uninstall service: success")
 		case commandRun.FullCommand():
 			checkConfigFileExist(*flagConfigFile)
 			startService()
@@ -128,7 +128,7 @@ func startService() {
 		os.Exit(1)
 	}
 
-	fmt.Fprintf(os.Stdout, "Start in console mode , press CTRL+C to exit ...\r\n\r\n")
+	fmt.Printf("Start in console mode , press CTRL+C to exit ...\r\n")
 	initLogger(config)
 	err = phpfpm.Start(config)
 	if err != nil {
@@ -241,9 +241,9 @@ func initLogger(config *conf.Conf) {
 			Compress:   config.Logger.Compress,
 		}
 		log.SetOutput(logger)
-		fmt.Fprintf(os.Stdout, "Logger ouput set to file %s .\n", config.Logger.Filename)
+		fmt.Printf("Logger ouput set to file %s .\n", config.Logger.Filename)
 	} else {
-		fmt.Fprintf(os.Stdout, "Logger ouput set to console.\n")
+		fmt.Printf("Logger ouput set to console.\n")
 	}
 
 	if config.LogLevel == "" {
