@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"path"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -14,9 +13,9 @@ import (
 	"wphpfpm/server"
 
 	"github.com/chai2010/winsvc"
-	"github.com/natefinch/lumberjack"
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/alecthomas/kingpin.v2"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 var (
@@ -220,24 +219,10 @@ func initLogger(config *conf.Conf) {
 	formatter := &MyTextFormatter{timeFormat: "2006-01-02 15:04:05 -0700"}
 	log.SetFormatter(formatter)
 
-	if config.LogLevel == "" {
-		config.LogLevel = "ERROR"
-	}
-
-	logLevel, err := log.ParseLevel(config.LogLevel)
-	if err != nil {
-		log.Fatalf("LogLevel %s can not parse.", config.LogLevel)
-	}
-	log.SetLevel(logLevel)
-	log.Infof("Set LogLevel to %s.", strings.ToUpper(logLevel.String()))
-
 	// Set logger
 	if len(config.Logger.Filename) > 0 {
 
-		logDir := path.Dir(config.Logger.Filename)
-		if err != nil {
-			log.Fatal(err)
-		}
+		logDir := filepath.Dir(config.Logger.Filename)
 		exeDir, err := filepath.Abs(filepath.Dir(os.Args[0])) // 執行檔的路徑
 		if err != nil {
 			log.Fatal(err)
@@ -256,10 +241,21 @@ func initLogger(config *conf.Conf) {
 			Compress:   config.Logger.Compress,
 		}
 		log.SetOutput(logger)
-		log.Infof("Logger ouput set to %s.", config.Logger.Filename)
+		fmt.Fprintf(os.Stdout, "Logger ouput set to file %s .\n", config.Logger.Filename)
 	} else {
-		log.Info("Logger ouput set to console.")
+		fmt.Fprintf(os.Stdout, "Logger ouput set to console.\n")
 	}
+
+	if config.LogLevel == "" {
+		config.LogLevel = "ERROR"
+	}
+
+	logLevel, err := log.ParseLevel(config.LogLevel)
+	if err != nil {
+		log.Fatalf("LogLevel %s can not parse.", config.LogLevel)
+	}
+	log.SetLevel(logLevel)
+	log.Infof("Set LogLevel to %s.", strings.ToUpper(logLevel.String()))
 
 	// Repair config
 	for i := 0; i < len(config.Instances); i++ {
@@ -275,7 +271,6 @@ func initLogger(config *conf.Conf) {
 			config.Instances[i].MaxProcesses = 4
 		}
 	}
-
 }
 
 // MyTextFormatter logrus custom formatter
