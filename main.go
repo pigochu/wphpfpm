@@ -1,13 +1,13 @@
-package main
+package wphpfpm
 
 import (
-	"bytes"
 	"fmt"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"strings"
 	"sync"
+	"unsafe"
 	"wphpfpm/conf"
 	"wphpfpm/phpfpm"
 	"wphpfpm/server"
@@ -150,7 +150,7 @@ func startService() {
 		}
 		serr, terr := p.Proxy(c) // blocked
 		if log.IsLevelEnabled(log.DebugLevel) && (serr != nil || terr != nil) {
-			log.Debugf("php-cgi(%s) proxy error , serr : %s , terr: %s", p.ExecWithPippedName(), serr, terr)
+			log.Debug("php-cgi(", p.ExecWithPippedName(), " ) proxy error , serr : ", serr.Error(), " , terr: ", terr.Error())
 		}
 		phpfpm.PutIdleProcess(p)
 
@@ -280,17 +280,7 @@ type MyTextFormatter struct {
 
 // Format logrus custom format
 func (f *MyTextFormatter) Format(entry *log.Entry) ([]byte, error) {
-	var b *bytes.Buffer
-	if entry.Buffer != nil {
-		b = entry.Buffer
-	} else {
-		b = &bytes.Buffer{}
-	}
-	b.WriteString(entry.Time.Format(f.timeFormat))
-	b.WriteString(" [")
-	b.WriteString(entry.Level.String())
-	b.WriteString("]: ")
-	b.WriteString(entry.Message)
-	b.WriteByte('\n')
-	return b.Bytes(), nil
+	var s string
+	s = entry.Time.Format(f.timeFormat) + " [" + entry.Level.String() + "]: " + entry.Message + "\n"
+	return *(*[]byte)(unsafe.Pointer(&s)), nil
 }
