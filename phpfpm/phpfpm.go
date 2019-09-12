@@ -8,6 +8,14 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// Instance : struct
+type Instance struct {
+	execPath  string
+	args      []string
+	env       []string
+	processes []Process
+}
+
 var (
 	// conf 是 json 讀進來後產生的設定
 	phpfpmConf *conf.Conf

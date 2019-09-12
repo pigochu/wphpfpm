@@ -14,14 +14,6 @@ import (
 	"gopkg.in/natefinch/npipe.v2"
 )
 
-// Instance : struct
-type Instance struct {
-	execPath  string
-	args      []string
-	env       []string
-	processes []Process
-}
-
 // Process : struct
 type Process struct {
 	execPath      string
@@ -45,7 +37,8 @@ type Process struct {
 }
 
 var (
-	namedPipeNumber = time.Now().Unix()
+	namedPipeNumber      = time.Now().Unix()
+	namedPipeNumberMutex sync.Mutex
 )
 
 // newProcess : Create new Process
@@ -64,7 +57,9 @@ func newProcess(execPath string, args []string, env []string) *Process {
 // TryStart will execute php-cgi twince
 func (p *Process) TryStart() (err error) {
 	// pippedName 是啟動 php-cgi 時候指定 -b pipename 使用的
+	namedPipeNumberMutex.Lock()
 	namedPipeNumber++
+	namedPipeNumberMutex.Unlock()
 	p.pippedName = `\\.\pipe\wphpfpm\wphpfpm.` + strconv.FormatInt(namedPipeNumber, 10)
 	p.requestCount = 0
 	p.execWithPippedName = p.execPath + " -> " + p.pippedName
