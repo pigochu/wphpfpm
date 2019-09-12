@@ -1,4 +1,4 @@
-package wphpfpm
+package main
 
 import (
 	"fmt"
