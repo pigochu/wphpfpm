@@ -149,9 +149,10 @@ func startService() {
 			return
 		}
 		serr, terr := p.Proxy(c) // blocked
-		if log.IsLevelEnabled(log.DebugLevel) && (serr != nil || terr != nil) {
-			log.Debug("php-cgi(", p.ExecWithPippedName(), " ) proxy error , serr : ", serr.Error(), " , terr: ", terr.Error())
+		if log.IsLevelEnabled(log.DebugLevel) {
+			log.Debugf("php-cgi(%s) proxy error , serr : %s , terr : %s", p.ExecWithPippedName(), serr, terr)
 		}
+
 		phpfpm.PutIdleProcess(p)
 
 		return
