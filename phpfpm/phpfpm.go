@@ -110,7 +110,6 @@ func Stop() {
 	log.Info("phpfpm stoping.")
 	stopManage = true
 	mutex.Lock()
-	defer mutex.Unlock()
 
 	var next *list.Element
 
@@ -124,17 +123,18 @@ func Stop() {
 
 	}
 	log.Info("phpfpm stopped.")
+	mutex.Unlock()
 }
 
 // GetIdleProcess : 取得任何一個 Idle 的 Process , 並且移除 Idle 列表
 func GetIdleProcess(instanceIndex int) (p *Process) {
 	mutex.Lock()
-	defer mutex.Unlock()
 	e := idleProcesses[instanceIndex].Front()
 	if e != nil {
 		p = idleProcesses[instanceIndex].Remove(e).(*Process)
 		p.mapElement = nil
 	}
+	mutex.Unlock()
 	return
 }
 
@@ -142,7 +142,7 @@ func GetIdleProcess(instanceIndex int) (p *Process) {
 func PutIdleProcess(p *Process) (err error) {
 
 	mutex.Lock()
-	defer mutex.Unlock()
+
 	if p.pipe != nil {
 		err = p.pipe.Close()
 		p.pipe = nil
@@ -162,5 +162,7 @@ func PutIdleProcess(p *Process) (err error) {
 			log.Debugf("php-cgi(%s) is idle , requests count : %d", p.execWithPippedName, p.requestCount)
 		}
 	}
+
+	mutex.Unlock()
 	return
 }
