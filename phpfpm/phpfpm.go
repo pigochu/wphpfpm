@@ -55,6 +55,9 @@ func (inst *Instance) Start() (err error) {
 }
 
 func (inst *Instance) createAndPushProcess() (err error) {
+	if inst.stopManage {
+		return
+	}
 
 	p1 := newProcess(inst.conf.ExecPath, inst.conf.Args, inst.conf.Env)
 
@@ -107,12 +110,24 @@ func (inst *Instance) monProcess(p *Process) {
 func (inst *Instance) Stop() {
 	log.Info("phpfpm stoping.")
 	inst.stopManage = true
-	inst.mutex.Lock()
-	defer inst.mutex.Unlock()
 
-	for _, p := range inst.processes {
-		p.Kill()
+	for {
+		p := inst.popupIdle()
+		if p != nil {
+			inst.remove(p)
+			p.Kill()
+		}
+
+		inst.mutex.Lock()
+		length := len(inst.processes)
+		inst.mutex.Unlock()
+
+		if length == 0 {
+			break
+		}
+		time.Sleep(time.Duration(500 * time.Microsecond))
 	}
+
 	log.Info("phpfpm stopped.")
 }
 
@@ -262,7 +277,7 @@ func (inst *Instance) remove(p *Process) {
 	inst.mutex.Lock()
 	defer inst.mutex.Unlock()
 
-	if p == inst.idleProcesses[0] {
+	if len(inst.idleProcesses) > 0 && p == inst.idleProcesses[0] {
 		inst.idleProcesses = inst.idleProcesses[1:]
 	}
 

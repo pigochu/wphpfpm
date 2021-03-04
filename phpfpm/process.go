@@ -33,10 +33,10 @@ type Process struct {
 
 	wg sync.WaitGroup
 
-	inUse  bool  // 进程正在工作
-	inPool bool  // 创建进程时是否已加入到进程池
-	closed bool  // 进程已退出
-	idleAt int64 // 空闲开始时间
+	inUse     bool  // 进程正在工作
+	inPool    bool  // 创建进程时是否已加入到进程池
+	closed    bool  // 进程已退出
+	idleAt    int64 // 空闲开始时间
 }
 
 var (

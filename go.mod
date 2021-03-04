@@ -11,7 +11,7 @@ require (
 	github.com/kr/pretty v0.1.0 // indirect
 	github.com/sirupsen/logrus v1.4.2
 	golang.org/x/net v0.0.0-20190912160710-24e19bdeb0f2
-	golang.org/x/sys v0.0.0-20190912141932-bc967efca4b8 // indirect
+	golang.org/x/sys v0.0.0-20190912141932-bc967efca4b8
 	gopkg.in/alecthomas/kingpin.v2 v2.2.6
 	gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.0.0
