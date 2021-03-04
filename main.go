@@ -30,6 +30,7 @@ var (
 	flagConfigFile   *string
 
 	servers []*server.Server
+	// phpfpmInst []*phpfpm.Instance
 )
 
 func main() {
@@ -130,16 +131,12 @@ func startService() {
 
 	fmt.Printf("Start in console mode , press CTRL+C to exit ...\r\n")
 	initLogger(config)
-	err = phpfpm.Start(config)
-	if err != nil {
-		log.Fatalf("Can not start service : %s\n", err.Error())
-	}
 
 	var events server.Event
 
 	events.OnConnect = func(c *server.Conn) (action server.Action) {
-
-		p := phpfpm.GetIdleProcess(c.Server().Tag.(int))
+		pool := c.Server().PhpfpmPool
+		p := pool.GetIdleProcess()
 
 		if p == nil {
 			if log.IsLevelEnabled(log.ErrorLevel) {
@@ -153,12 +150,12 @@ func startService() {
 			log.Debugf("php-cgi(%s) proxy error , serr : %s , terr : %s", p.ExecWithPippedName(), serr, terr)
 		}
 
-		phpfpm.PutIdleProcess(p)
+		pool.PutIdleProcess(p)
 
 		return
 	}
 
-	conf := phpfpm.Conf()
+	conf := config
 
 	var wg sync.WaitGroup
 
@@ -168,7 +165,23 @@ func startService() {
 
 	for i := 0; i < len(conf.Instances); i++ {
 		instance := conf.Instances[i]
-		servers[i] = &server.Server{MaxConnections: instance.MaxProcesses, BindAddress: instance.Bind, Tag: i}
+		phpfpmInst := phpfpm.NewPhpFpmInstance(i, instance)
+
+		if err != nil {
+			log.Fatalf("Can not start service : %s\n", err.Error())
+		}
+
+		err = phpfpmInst.Start()
+		if err != nil {
+			log.Fatalf("Can not start service : %s\n", err.Error())
+		}
+
+		servers[i] = &server.Server{
+			MaxConnections: instance.MaxProcesses,
+			BindAddress:    instance.Bind,
+			Tag:            i,
+			PhpfpmPool:     phpfpmInst,
+		}
 
 		log.Infof("Start server #%d on %s", i, servers[i].BindAddress)
 
@@ -194,7 +207,6 @@ func startService() {
 	}()
 
 	wg.Wait()
-	phpfpm.Stop()
 	log.Info("Service Stopped.")
 }
 
@@ -203,6 +215,7 @@ func stopService() {
 
 	for i := 0; i < len(servers); i++ {
 		servers[i].Shutdown()
+		servers[i].PhpfpmPool.Stop()
 	}
 
 }
@@ -270,6 +283,12 @@ func initLogger(config *conf.Conf) {
 			//Repair MaxProcesses
 			log.Warnf("Instance #%d MaxProcesses is less 1 , set to 4", i)
 			config.Instances[i].MaxProcesses = 4
+		}
+
+		if config.Instances[i].IdleTimeout < 5 {
+			//Repair MaxProcesses
+			log.Warnf("Instance #%d IdleTimeout is less than 5s , set to 120s", i)
+			config.Instances[i].IdleTimeout = 120
 		}
 	}
 }
