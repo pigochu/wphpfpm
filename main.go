@@ -25,11 +25,14 @@ var (
 	commandInstall   *kingpin.CmdClause
 	commandUninstall *kingpin.CmdClause
 	commandStart     *kingpin.CmdClause
+	commandReload    *kingpin.CmdClause
 	commandStop      *kingpin.CmdClause
 	commandRun       *kingpin.CmdClause
 	flagConfigFile   *string
 
 	servers []*server.Server
+
+	config *conf.Conf
 )
 
 func main() {
@@ -41,7 +44,12 @@ func main() {
 		checkConfigFileExist(*flagConfigFile)
 
 		fmt.Println(serviceName, "Run service")
-		if err := winsvc.RunAsService(serviceName, startService, stopService, false); err != nil {
+		serviceHandel := &server.WinService{
+			Start:  startService,
+			Stop:   stopService,
+			Reload: reloadService,
+		}
+		if err := server.RunAsService(serviceName, serviceHandel); err != nil {
 			log.Fatalf(serviceName+" run: %v\n", err)
 		}
 	} else {
@@ -62,16 +70,21 @@ func main() {
 			startService()
 		case commandStart.FullCommand():
 			if err := winsvc.StartService(serviceName); err != nil {
-				fmt.Println("Start service:", err)
+				fmt.Println("Start service: ", err)
 				os.Exit(1)
 			}
-			fmt.Println("Start service: success")
+			fmt.Println("Start service : success")
+		case commandReload.FullCommand():
+			if err := server.ReloadService(serviceName); err != nil {
+				fmt.Println("Reload service :", err)
+			}
+			fmt.Println("Reload service : success")
 		case commandStop.FullCommand():
 			if err := winsvc.StopService(serviceName); err != nil {
-				fmt.Println("Stop service:", err)
+				fmt.Println("Stop service :", err)
 				os.Exit(1)
 			}
-			fmt.Println("Stop service: success")
+			fmt.Println("Stop service : success")
 			return
 		}
 	}
@@ -83,6 +96,7 @@ func initCommandFlag() {
 	commandUninstall = kingpin.Command("uninstall", "Uninstall service")
 	commandStart = kingpin.Command("start", "Start service.")
 	commandStop = kingpin.Command("stop", "Stop service.")
+	commandReload = kingpin.Command("reload", "reload config and graceful restart php-cgi processes.")
 	commandRun = kingpin.Command("run", "Run in console mode")
 	flag := kingpin.Flag("conf", "Config file path , required by install or run.")
 	if len(os.Args) > 1 && (os.Args[1] == "install" || os.Args[1] == "run") {
@@ -121,25 +135,15 @@ func installService() {
 
 // 啟動服務
 func startService() {
-	config, err := conf.LoadFile(*flagConfigFile)
+	var err error
 
-	if err != nil {
-		fmt.Printf("Config load error : %s\n", err.Error())
-		os.Exit(1)
-	}
-
-	fmt.Printf("Start in console mode , press CTRL+C to exit ...\r\n")
-	initLogger(config)
-	err = phpfpm.Start(config)
-	if err != nil {
-		log.Fatalf("Can not start service : %s\n", err.Error())
-	}
+	loadConfig()
 
 	var events server.Event
 
 	events.OnConnect = func(c *server.Conn) (action server.Action) {
-
-		p := phpfpm.GetIdleProcess(c.Server().Tag.(int))
+		pool := c.Server().PhpfpmPool
+		p := pool.GetIdleProcess()
 
 		if p == nil {
 			if log.IsLevelEnabled(log.ErrorLevel) {
@@ -153,12 +157,12 @@ func startService() {
 			log.Debugf("php-cgi(%s) proxy error , serr : %s , terr : %s", p.ExecWithPippedName(), serr, terr)
 		}
 
-		phpfpm.PutIdleProcess(p)
+		pool.PutIdleProcess(p)
 
 		return
 	}
 
-	conf := phpfpm.Conf()
+	conf := config
 
 	var wg sync.WaitGroup
 
@@ -168,7 +172,23 @@ func startService() {
 
 	for i := 0; i < len(conf.Instances); i++ {
 		instance := conf.Instances[i]
-		servers[i] = &server.Server{MaxConnections: instance.MaxProcesses, BindAddress: instance.Bind, Tag: i}
+		phpfpmInst := phpfpm.NewPhpFpmInstance(i, instance)
+
+		if err != nil {
+			log.Fatalf("Can not start service : %s\n", err.Error())
+		}
+
+		err = phpfpmInst.Start()
+		if err != nil {
+			log.Fatalf("Can not start service : %s\n", err.Error())
+		}
+
+		servers[i] = &server.Server{
+			MaxConnections: instance.MaxProcesses,
+			BindAddress:    instance.Bind,
+			Tag:            i,
+			PhpfpmPool:     phpfpmInst,
+		}
 
 		log.Infof("Start server #%d on %s", i, servers[i].BindAddress)
 
@@ -194,14 +214,47 @@ func startService() {
 	}()
 
 	wg.Wait()
-	phpfpm.Stop()
 	log.Info("Service Stopped.")
+}
+
+func reloadService() {
+	var err error
+
+	loadConfig()
+
+	for i := 0; i < len(servers); i++ {
+
+		oldFpm := servers[i].PhpfpmPool
+
+		// create and replace instance
+		if len(config.Instances)-1 >= i {
+			instance := config.Instances[i]
+			phpfpmInst := phpfpm.NewPhpFpmInstance(i, instance)
+			if err != nil {
+				log.Fatalf("Can not restart service : %s\n", err.Error())
+				continue
+			}
+
+			err = phpfpmInst.Start()
+			if err != nil {
+				log.Fatalf("Can not restart service : %s\n", err.Error())
+				continue
+			}
+
+			servers[i].PhpfpmPool = phpfpmInst
+		}
+
+		// stop old instance
+		oldFpm.Stop()
+	}
+
 }
 
 // 停止服務
 func stopService() {
 
 	for i := 0; i < len(servers); i++ {
+		servers[i].PhpfpmPool.Stop()
 		servers[i].Shutdown()
 	}
 
@@ -212,6 +265,41 @@ func checkConfigFileExist(filepath string) {
 	if !exist {
 		fmt.Printf("Could not load config file : %s", filepath)
 		os.Exit(1)
+	}
+}
+
+func loadConfig() {
+
+	var err error
+	config, err = conf.LoadFile(*flagConfigFile)
+
+	if err != nil {
+		fmt.Printf("Config load error : %s\n", err.Error())
+		os.Exit(1)
+	}
+
+	fmt.Printf("Start in console mode , press CTRL+C to exit ...\r\n")
+	initLogger(config)
+
+	// Repair config
+	for i := 0; i < len(config.Instances); i++ {
+		if config.Instances[i].MaxRequestsPerProcess < 1 {
+			// Repair MaxRequestsPerProcess
+			log.Warnf("Instance #%d MaxRequestsPerProcess is less 1 , set to 500", i)
+			config.Instances[i].MaxRequestsPerProcess = 500
+		}
+
+		if config.Instances[i].MaxProcesses < 1 {
+			//Repair MaxProcesses
+			log.Warnf("Instance #%d MaxProcesses is less 1 , set to 4", i)
+			config.Instances[i].MaxProcesses = 4
+		}
+
+		if config.Instances[i].IdleTimeout < 5 {
+			//Repair MaxProcesses
+			log.Warnf("Instance #%d IdleTimeout is less than 5s , set to 120s", i)
+			config.Instances[i].IdleTimeout = 120
+		}
 	}
 }
 
@@ -258,20 +346,6 @@ func initLogger(config *conf.Conf) {
 	log.SetLevel(logLevel)
 	log.Infof("Set LogLevel to %s.", strings.ToUpper(logLevel.String()))
 
-	// Repair config
-	for i := 0; i < len(config.Instances); i++ {
-		if config.Instances[i].MaxRequestsPerProcess < 1 {
-			// Repair MaxRequestsPerProcess
-			log.Warnf("Instance #%d MaxRequestsPerProcess is less 1 , set to 500", i)
-			config.Instances[i].MaxRequestsPerProcess = 500
-		}
-
-		if config.Instances[i].MaxProcesses < 1 {
-			//Repair MaxProcesses
-			log.Warnf("Instance #%d MaxProcesses is less 1 , set to 4", i)
-			config.Instances[i].MaxProcesses = 4
-		}
-	}
 }
 
 // MyTextFormatter logrus custom formatter

@@ -1,13 +1,13 @@
 package phpfpm
 
 import (
-	"container/list"
 	"io"
 	"net"
 	"os"
 	"os/exec"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -16,14 +16,12 @@ import (
 
 // Process : struct
 type Process struct {
-	execPath      string
-	args          []string
-	env           []string
-	cmd           *exec.Cmd
-	instanceIndex int // 這個是在 phpfpm.go 中的 idleprocess  連結用的 , 代表這個 Process 是屬於那個 Instance
-	mapElement    *list.Element
-	pipe          *npipe.PipeConn
-	pippedName    string // php-cgi 執行時指定的 pipped name
+	execPath   string
+	args       []string
+	env        []string
+	cmd        *exec.Cmd
+	pipe       *npipe.PipeConn
+	pippedName string // php-cgi 執行時指定的 pipped name
 
 	requestCount int // 紀錄當前執行中的 php-cgi 已經接受幾次要求了
 
@@ -34,6 +32,11 @@ type Process struct {
 	execWithPippedName string
 
 	wg sync.WaitGroup
+
+	inUse     bool  // 进程正在工作
+	inPool    bool  // 创建进程时是否已加入到进程池
+	closed    bool  // 进程已退出
+	idleAt    int64 // 空闲开始时间
 }
 
 var (
@@ -52,6 +55,18 @@ func newProcess(execPath string, args []string, env []string) *Process {
 	p.copyRbuf = make([]byte, 4096)
 	p.copyWbuf = make([]byte, 16384)
 	return p
+}
+
+// IdleAt time of turned to idle status
+func (p *Process) IdleAt() time.Time {
+	unix := atomic.LoadInt64(&p.idleAt)
+	return time.Unix(unix, 0)
+}
+
+// TouchIdleTime set idle time as now
+func (p *Process) TouchIdleTime() {
+	atomic.StoreInt64(&p.idleAt, time.Now().Unix())
+	p.inUse = false
 }
 
 // TryStart will execute php-cgi twince

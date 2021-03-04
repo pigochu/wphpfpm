@@ -2,6 +2,7 @@ package server
 
 import (
 	"net"
+	"wphpfpm/phpfpm"
 
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/net/netutil"
@@ -19,6 +20,8 @@ type Server struct {
 
 	shutdownChan chan bool // 此值如果為 true , 代表 Server 必須停止，所有工作都需要關閉
 	shutdown     bool
+
+	PhpfpmPool *phpfpm.Instance
 }
 
 // Conn 是當 Accept 後產生的連線物件
